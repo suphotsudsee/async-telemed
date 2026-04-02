@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.vite/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+coverage/
+.DS_Store
+Thumbs.db
+*.log
+postgres-data/
