@@ -1,4 +1,4 @@
-﻿services:
+services:
   postgres:
     image: postgres:16-alpine
     environment:
@@ -7,7 +7,7 @@
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - coolify_postgres_data:/var/lib/postgresql/data
-      - ../database/migrations:/docker-entrypoint-initdb.d:ro
+      - ./database/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-telemed} -d ${POSTGRES_DB:-telemed}"]
       interval: 10s
@@ -16,7 +16,7 @@
 
   node-api:
     build:
-      context: ..
+      context: .
       dockerfile: docker/node-api.prod.Dockerfile
     environment:
       PORT: 8080
@@ -49,7 +49,7 @@
 
   patient-ui:
     build:
-      context: ..
+      context: .
       dockerfile: docker/patient.Dockerfile
       args:
         VITE_API_URL: ${PUBLIC_API_URL}
@@ -64,7 +64,7 @@
 
   doctor-ui:
     build:
-      context: ..
+      context: .
       dockerfile: docker/doctor.Dockerfile
       args:
         VITE_API_URL: ${PUBLIC_API_URL}
@@ -76,7 +76,7 @@
 
   admin-ui:
     build:
-      context: ..
+      context: .
       dockerfile: docker/admin.Dockerfile
       args:
         VITE_API_URL: ${PUBLIC_API_URL}
