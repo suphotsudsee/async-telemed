@@ -13,7 +13,8 @@ import {
   healthCheck as dbHealthCheck,
   listConsultations as listConsultationsDb,
   respondToConsultation as respondToConsultationDb,
-  verifyDoctorCredentials as verifyDoctorCredentialsDb
+  verifyDoctorCredentials as verifyDoctorCredentialsDb,
+  verifyAdminCredentials as verifyAdminCredentialsDb
 } from "./lib/db.js";
 import {
   claimConsultation as claimConsultationMock,
@@ -25,7 +26,8 @@ import {
   getSlaSnapshot as getSlaSnapshotMock,
   listConsultations as listConsultationsMock,
   respondToConsultation as respondToConsultationMock,
-  verifyDoctorCredentials as verifyDoctorCredentialsMock
+  verifyDoctorCredentials as verifyDoctorCredentialsMock,
+  verifyAdminCredentials as verifyAdminCredentialsMock
 } from "./lib/domain.js";
 import { generateToken, rateLimitByUser, requireAdmin, requireDoctor } from "./lib/auth.js";
 import { requestOtp, verifyOtp } from "./lib/otp.js";
@@ -44,6 +46,7 @@ const respondToConsultation = USE_DATABASE ? respondToConsultationDb : respondTo
 const getRoutingCoverage = USE_DATABASE ? getRoutingCoverageDb : getRoutingCoverageMock;
 const getSlaSnapshot = USE_DATABASE ? getSlaSnapshotDb : getSlaSnapshotMock;
 const verifyDoctorCredentials = USE_DATABASE ? verifyDoctorCredentialsDb : verifyDoctorCredentialsMock;
+const verifyAdminCredentials = USE_DATABASE ? verifyAdminCredentialsDb : verifyAdminCredentialsMock;
 
 const authRequestSchema = z.object({
   thaiId: z.string(),
@@ -70,6 +73,11 @@ const consultationSchema = z.object({
 });
 
 const doctorLoginSchema = z.object({
+  username: z.string().min(3),
+  password: z.string().min(6)
+});
+
+const adminLoginSchema = z.object({
   username: z.string().min(3),
   password: z.string().min(6)
 });
@@ -329,6 +337,34 @@ export function createApp() {
     } catch (error) {
       console.error("Failed to respond to consultation:", error);
       response.status(500).json({ message: "Failed to save doctor response." });
+    }
+  });
+
+  app.post("/api/v1/admin/auth/login", async (request, response) => {
+    const payload = adminLoginSchema.safeParse(request.body);
+    if (!payload.success) {
+      return response.status(400).json({ message: payload.error.flatten() });
+    }
+
+    try {
+      const session = await verifyAdminCredentials(payload.data);
+      if (!session) {
+        return response.status(401).json({ message: "Invalid username or password." });
+      }
+
+      const token = generateToken({
+        sub: session.admin.id,
+        role: "admin"
+      });
+
+      response.json({
+        token,
+        role: "admin",
+        admin: session.admin
+      });
+    } catch (error) {
+      console.error("Admin login failed:", error);
+      response.status(500).json({ message: "Failed to sign in admin." });
     }
   });
 

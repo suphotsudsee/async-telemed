@@ -191,3 +191,20 @@ export function verifyDoctorCredentials(input: {
     activeProvinceCode: doctor.provinceCodes[0]
   };
 }
+
+
+export function verifyAdminCredentials(input: {
+  username: string;
+  password: string;
+}): { admin: { id: string; displayName: string } } | null {
+  if (input.username.trim().toLowerCase() !== 'admin' || input.password !== 'admin123') {
+    return null;
+  }
+
+  return {
+    admin: {
+      id: '00000000-0000-0000-0000-000000000201',
+      displayName: 'Ops Admin'
+    }
+  };
+}

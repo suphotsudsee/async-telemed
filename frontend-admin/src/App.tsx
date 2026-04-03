@@ -1,103 +1,388 @@
-const metrics = [
-  { label: "Open consultations", value: "124", tone: "bg-white" },
-  { label: "First response breaches", value: "7", tone: "bg-ops-sand" },
-  { label: "Completion breaches", value: "3", tone: "bg-rose-50" },
-  { label: "Active provinces", value: "28", tone: "bg-ops-mint" }
-];
+﻿import { useEffect, useMemo, useState } from 'react';
 
-const provinceRows = [
-  { province: "Bangkok", open: 41, breached: 2, doctors: 9, sla: "94%" },
-  { province: "Chiang Mai", open: 18, breached: 1, doctors: 4, sla: "92%" },
-  { province: "Phuket", open: 9, breached: 0, doctors: 2, sla: "100%" },
-  { province: "Khon Kaen", open: 14, breached: 2, doctors: 3, sla: "86%" }
-];
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
+const SESSION_KEY = 'admin_session';
+
+const TEXT = {
+  appTitle: '\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21\u0e07\u0e32\u0e19',
+  appSubtitle: '\u0e14\u0e39\u0e20\u0e32\u0e1e\u0e23\u0e27\u0e21 SLA, \u0e20\u0e32\u0e23\u0e30\u0e04\u0e34\u0e27, \u0e41\u0e25\u0e30\u0e04\u0e27\u0e32\u0e21\u0e04\u0e23\u0e2d\u0e1a\u0e04\u0e25\u0e38\u0e21\u0e02\u0e2d\u0e07\u0e41\u0e1e\u0e17\u0e22\u0e4c\u0e41\u0e1a\u0e1a real-time',
+  loginTitle: '\u0e40\u0e02\u0e49\u0e32\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19 Admin App',
+  loginSubtitle: '\u0e43\u0e0a\u0e49\u0e1a\u0e31\u0e0d\u0e0a\u0e35 admin \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e02\u0e49\u0e32\u0e16\u0e36\u0e07\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25 SLA \u0e41\u0e25\u0e30 routing',
+  loginFail: '\u0e40\u0e02\u0e49\u0e32\u0e23\u0e30\u0e1a\u0e1a\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08',
+  username: 'Username',
+  password: '\u0e23\u0e2b\u0e31\u0e2a\u0e1c\u0e48\u0e32\u0e19',
+  signIn: '\u0e40\u0e02\u0e49\u0e32\u0e17\u0e33\u0e07\u0e32\u0e19',
+  signOut: '\u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01\u0e23\u0e30\u0e1a\u0e1a',
+  refresh: '\u0e42\u0e2b\u0e25\u0e14\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e43\u0e2b\u0e21\u0e48',
+  loading: '\u0e01\u0e33\u0e25\u0e31\u0e07\u0e42\u0e2b\u0e25\u0e14\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25...',
+  apiError: '\u0e42\u0e2b\u0e25\u0e14\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25 admin \u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08',
+  openCases: '\u0e04\u0e34\u0e27\u0e17\u0e35\u0e48\u0e22\u0e31\u0e07\u0e40\u0e1b\u0e34\u0e14\u0e2d\u0e22\u0e39\u0e48',
+  firstBreaches: '\u0e40\u0e04\u0e2a\u0e40\u0e2a\u0e35\u0e48\u0e22\u0e07 SLA \u0e41\u0e23\u0e01',
+  completionBreaches: '\u0e40\u0e04\u0e2a\u0e40\u0e01\u0e34\u0e19 SLA \u0e1b\u0e34\u0e14\u0e07\u0e32\u0e19',
+  activeProvinces: '\u0e08\u0e31\u0e07\u0e2b\u0e27\u0e31\u0e14\u0e17\u0e35\u0e48\u0e21\u0e35\u0e04\u0e34\u0e27',
+  avgWait: '\u0e40\u0e27\u0e25\u0e32\u0e23\u0e2d\u0e40\u0e09\u0e25\u0e35\u0e48\u0e22',
+  provinceTable: '\u0e20\u0e32\u0e1e\u0e23\u0e27\u0e21\u0e15\u0e32\u0e21\u0e08\u0e31\u0e07\u0e2b\u0e27\u0e31\u0e14',
+  provinceHint: '\u0e14\u0e39\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e34\u0e27\u0e17\u0e35\u0e48\u0e22\u0e31\u0e07\u0e04\u0e49\u0e32\u0e07, \u0e40\u0e04\u0e2a\u0e17\u0e35\u0e48\u0e40\u0e2a\u0e35\u0e48\u0e22\u0e07\u0e2b\u0e23\u0e37\u0e2d\u0e40\u0e01\u0e34\u0e19 SLA \u0e41\u0e25\u0e30\u0e08\u0e33\u0e19\u0e27\u0e19\u0e41\u0e1e\u0e17\u0e22\u0e4c\u0e04\u0e23\u0e2d\u0e1a\u0e04\u0e25\u0e38\u0e21',
+  watchTitle: '\u0e08\u0e38\u0e14\u0e17\u0e35\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e08\u0e31\u0e1a\u0e15\u0e32',
+  watchEmpty: '\u0e22\u0e31\u0e07\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e04\u0e27\u0e32\u0e21\u0e40\u0e2a\u0e35\u0e48\u0e22\u0e07\u0e23\u0e38\u0e19\u0e41\u0e23\u0e07\u0e43\u0e19\u0e23\u0e2d\u0e1a\u0e19\u0e35\u0e49',
+  generatedAt: '\u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15\u0e25\u0e48\u0e32\u0e2a\u0e38\u0e14',
+  province: '\u0e08\u0e31\u0e07\u0e2b\u0e27\u0e31\u0e14',
+  open: '\u0e04\u0e34\u0e27\u0e04\u0e49\u0e32\u0e07',
+  risk: '\u0e40\u0e2a\u0e35\u0e48\u0e22\u0e07/\u0e40\u0e01\u0e34\u0e19 SLA',
+  doctors: '\u0e08\u0e33\u0e19\u0e27\u0e19\u0e41\u0e1e\u0e17\u0e22\u0e4c',
+  closedRate: '\u0e2d\u0e31\u0e15\u0e23\u0e32\u0e1b\u0e34\u0e14\u0e07\u0e32\u0e19',
+  mins: '\u0e19\u0e32\u0e17\u0e35',
+  demoHint: 'admin / admin123'
+} as const;
+
+type AdminSession = {
+  token: string;
+  role: 'admin';
+  admin: {
+    id: string;
+    displayName: string;
+  };
+};
+
+type Consultation = {
+  id: string;
+  provinceCode: string;
+  status: string;
+  firstResponseDueAt: string;
+  completionDueAt: string;
+};
+
+type SlaItem = {
+  status: string;
+  count: number;
+  avgWaitMinutes: number;
+};
+
+type RoutingItem = {
+  provinceCode: string;
+  doctorCount: number;
+};
+
+type ProvinceRow = {
+  provinceCode: string;
+  openCount: number;
+  riskCount: number;
+  doctorCount: number;
+  completionRate: number;
+};
+
+function readSession(): AdminSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as AdminSession) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSession(session: AdminSession | null) {
+  if (!session) {
+    localStorage.removeItem(SESSION_KEY);
+    return;
+  }
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
+
+function formatThaiDate(value?: string) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString('th-TH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function formatMinutes(value: number) {
+  return `${Math.round(value)} ${TEXT.mins}`;
+}
+
+function isOpenStatus(status: string) {
+  return ['submitted', 'triaged', 'in_review', 'awaiting_patient'].includes(status);
+}
+
+function isFirstResponseRisk(item: Consultation) {
+  return ['submitted', 'triaged'].includes(item.status) && new Date(item.firstResponseDueAt).getTime() < Date.now();
+}
+
+function isCompletionRisk(item: Consultation) {
+  return isOpenStatus(item.status) && new Date(item.completionDueAt).getTime() < Date.now();
+}
 
 export default function App() {
+  const [session, setSession] = useState<AdminSession | null>(() => readSession());
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('admin123');
+  const [loading, setLoading] = useState(true);
+  const [signingIn, setSigningIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<string>('');
+  const [consultations, setConsultations] = useState<Consultation[]>([]);
+  const [slaItems, setSlaItems] = useState<SlaItem[]>([]);
+  const [routingItems, setRoutingItems] = useState<RoutingItem[]>([]);
+
+  async function loadDashboard(activeSession = session) {
+    if (!activeSession) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const consultationsResponse = await fetch(`${API_BASE}/api/v1/consultations`);
+      if (!consultationsResponse.ok) throw new Error('consultations');
+      const consultationsPayload = (await consultationsResponse.json()) as Consultation[];
+
+      const slaResponse = await fetch(`${API_BASE}/api/v1/admin/sla`, {
+        headers: { Authorization: `Bearer ${activeSession.token}` }
+      });
+      if (!slaResponse.ok) throw new Error('sla');
+      const slaPayload = await slaResponse.json();
+
+      const provinceCodes = Array.from(new Set((consultationsPayload ?? []).map((item) => item.provinceCode).filter(Boolean)));
+      const routingQuery = provinceCodes.length > 0 ? `?provinces=${provinceCodes.join(',')}` : '';
+      const routingResponse = await fetch(`${API_BASE}/api/v1/admin/routing${routingQuery}`);
+      if (!routingResponse.ok) throw new Error('routing');
+      const routingPayload = (await routingResponse.json()) as RoutingItem[];
+
+      setConsultations(Array.isArray(consultationsPayload) ? consultationsPayload : []);
+      setSlaItems(Array.isArray(slaPayload?.items) ? slaPayload.items : []);
+      setRoutingItems(Array.isArray(routingPayload) ? routingPayload : []);
+      setGeneratedAt(String(slaPayload?.generatedAt ?? new Date().toISOString()));
+    } catch {
+      setError(TEXT.apiError);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (session) {
+      writeSession(session);
+      void loadDashboard(session);
+      return;
+    }
+
+    writeSession(null);
+    setLoading(false);
+  }, [session]);
+
+  async function signIn() {
+    if (!username.trim() || !password) {
+      setError(TEXT.loginFail);
+      return;
+    }
+
+    setSigningIn(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/admin/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim(), password })
+      });
+      if (!response.ok) throw new Error('login');
+      const payload = (await response.json()) as AdminSession;
+      setSession(payload);
+    } catch {
+      setError(TEXT.loginFail);
+    } finally {
+      setSigningIn(false);
+    }
+  }
+
+  function signOut() {
+    setSession(null);
+    setConsultations([]);
+    setSlaItems([]);
+    setRoutingItems([]);
+    setGeneratedAt('');
+    setError(null);
+  }
+
+  const summary = useMemo(() => {
+    const openCases = consultations.filter((item) => isOpenStatus(item.status));
+    const firstBreaches = openCases.filter((item) => isFirstResponseRisk(item)).length;
+    const completionBreaches = openCases.filter((item) => isCompletionRisk(item)).length;
+    const activeProvinces = new Set(openCases.map((item) => item.provinceCode)).size;
+    const avgWaitMinutes = slaItems.length > 0
+      ? slaItems.reduce((sum, item) => sum + item.avgWaitMinutes, 0) / slaItems.length
+      : 0;
+
+    return { openCases: openCases.length, firstBreaches, completionBreaches, activeProvinces, avgWaitMinutes };
+  }, [consultations, slaItems]);
+
+  const provinceRows = useMemo<ProvinceRow[]>(() => {
+    const routingMap = new Map(routingItems.map((item) => [item.provinceCode, item.doctorCount]));
+    const grouped = new Map<string, { openCount: number; riskCount: number; completed: number; total: number }>();
+
+    for (const item of consultations) {
+      const current = grouped.get(item.provinceCode) ?? { openCount: 0, riskCount: 0, completed: 0, total: 0 };
+      current.total += 1;
+      if (isOpenStatus(item.status)) current.openCount += 1;
+      if (isFirstResponseRisk(item) || isCompletionRisk(item)) current.riskCount += 1;
+      if (item.status === 'completed' || item.status === 'escalated') current.completed += 1;
+      grouped.set(item.provinceCode, current);
+    }
+
+    return Array.from(grouped.entries())
+      .map(([provinceCode, value]) => ({
+        provinceCode,
+        openCount: value.openCount,
+        riskCount: value.riskCount,
+        doctorCount: routingMap.get(provinceCode) ?? 0,
+        completionRate: value.total > 0 ? Math.round((value.completed / value.total) * 100) : 0
+      }))
+      .sort((a, b) => b.openCount - a.openCount || b.riskCount - a.riskCount || a.provinceCode.localeCompare(b.provinceCode));
+  }, [consultations, routingItems]);
+
+  const watchItems = useMemo(() => {
+    return provinceRows.filter((row) => row.riskCount > 0 || (row.openCount > 0 && row.doctorCount === 0)).slice(0, 4);
+  }, [provinceRows]);
+
+  if (!session) {
+    return (
+      <main className="min-h-screen px-4 py-6 text-slate-900">
+        {error && <div className="bg-rose-700 px-4 py-2 text-center text-sm text-white">{error}</div>}
+        <div className="mx-auto flex min-h-screen max-w-3xl items-center justify-center">
+          <section className="w-full rounded-[2.25rem] bg-ops-navy p-8 text-white shadow-2xl">
+            <div className="text-xs uppercase tracking-[0.35em] text-white/55">Admin App</div>
+            <h1 className="mt-4 text-3xl font-extrabold">{TEXT.loginTitle}</h1>
+            <p className="mt-2 text-sm text-white/70">{TEXT.loginSubtitle}</p>
+            <div className="mt-4 rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/85">Demo: {TEXT.demoHint}</div>
+
+            <div className="mt-6 space-y-4">
+              <label className="block">
+                <div className="mb-2 text-sm text-white/70">{TEXT.username}</div>
+                <input className="w-full rounded-2xl border border-white/10 bg-slate-950/30 px-4 py-3 text-white outline-none" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
+              </label>
+              <label className="block">
+                <div className="mb-2 text-sm text-white/70">{TEXT.password}</div>
+                <input className="w-full rounded-2xl border border-white/10 bg-slate-950/30 px-4 py-3 text-white outline-none" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
+              </label>
+            </div>
+
+            <button type="button" onClick={signIn} disabled={signingIn} className="mt-6 w-full rounded-2xl bg-ops-cyan px-5 py-3 font-semibold text-white transition hover:brightness-110 disabled:opacity-60">
+              {signingIn ? TEXT.loading : TEXT.signIn}
+            </button>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main className="min-h-screen px-4 py-6">
+    <main className="min-h-screen px-4 py-6 text-slate-900">
+      {error && <div className="bg-rose-700 px-4 py-2 text-center text-sm text-white">{error}</div>}
       <div className="mx-auto max-w-7xl">
         <section className="rounded-[2.25rem] bg-ops-navy px-6 py-8 text-white shadow-2xl">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.4em] text-white/60">Operations</p>
-              <h1 className="mt-3 text-4xl font-extrabold">SLA and routing dashboard</h1>
-              <p className="mt-3 max-w-2xl text-white/75">
-                Province-level visibility across intake load, breach risk, and doctor coverage for the dermatology pilot.
-              </p>
+              <p className="text-sm uppercase tracking-[0.4em] text-white/60">Admin App</p>
+              <h1 className="mt-3 text-4xl font-extrabold">{TEXT.appTitle}</h1>
+              <p className="mt-3 max-w-2xl text-white/75">{TEXT.appSubtitle}</p>
             </div>
-            <div className="rounded-[1.5rem] bg-white/10 px-5 py-4">
-              <p className="text-sm text-white/60">Operating window</p>
-              <p className="mt-1 text-2xl font-semibold">08:00-20:00 ICT</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="rounded-[1.5rem] bg-white/10 px-5 py-4">
+                <p className="text-sm text-white/60">{session.admin.displayName}</p>
+                <p className="mt-1 text-lg font-semibold">{TEXT.generatedAt}</p>
+                <p className="mt-1 text-sm text-white/75">{formatThaiDate(generatedAt)}</p>
+              </div>
+              <div className="grid gap-2">
+                <button type="button" onClick={() => void loadDashboard()} className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/15">{TEXT.refresh}</button>
+                <button type="button" onClick={signOut} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10">{TEXT.signOut}</button>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {metrics.map((metric) => (
-            <article key={metric.label} className={`rounded-[1.75rem] ${metric.tone} p-5 shadow-lg`}>
-              <p className="text-sm text-slate-500">{metric.label}</p>
-              <p className="mt-3 text-4xl font-extrabold text-ops-navy">{metric.value}</p>
-            </article>
-          ))}
-        </section>
+        {loading ? (
+          <section className="mt-6 rounded-[2rem] bg-white p-10 text-center shadow-lg">{TEXT.loading}</section>
+        ) : (
+          <>
+            <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <MetricCard label={TEXT.openCases} value={String(summary.openCases)} tone="bg-white" />
+              <MetricCard label={TEXT.firstBreaches} value={String(summary.firstBreaches)} tone="bg-amber-50" />
+              <MetricCard label={TEXT.completionBreaches} value={String(summary.completionBreaches)} tone="bg-rose-50" />
+              <MetricCard label={TEXT.activeProvinces} value={String(summary.activeProvinces)} tone="bg-emerald-50" />
+              <MetricCard label={TEXT.avgWait} value={formatMinutes(summary.avgWaitMinutes)} tone="bg-sky-50" />
+            </section>
 
-        <section className="mt-6 grid gap-6 lg:grid-cols-[1.4fr,1fr]">
-          <article className="rounded-[2rem] bg-white p-6 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-ops-cyan">By province</p>
-                <h2 className="text-2xl font-bold text-ops-navy">Routing performance</h2>
-              </div>
-              <button type="button" className="rounded-full bg-ops-cyan px-4 py-2 text-sm font-semibold text-white">
-                Export SLA CSV
-              </button>
-            </div>
-
-            <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-slate-100">
-              <table className="min-w-full border-collapse text-left text-sm">
-                <thead className="bg-slate-50 text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Province</th>
-                    <th className="px-4 py-3">Open</th>
-                    <th className="px-4 py-3">Breaches</th>
-                    <th className="px-4 py-3">Doctors</th>
-                    <th className="px-4 py-3">SLA</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {provinceRows.map((row) => (
-                    <tr key={row.province} className="border-t border-slate-100">
-                      <td className="px-4 py-4 font-semibold text-ops-navy">{row.province}</td>
-                      <td className="px-4 py-4">{row.open}</td>
-                      <td className="px-4 py-4">{row.breached}</td>
-                      <td className="px-4 py-4">{row.doctors}</td>
-                      <td className="px-4 py-4">
-                        <span className="rounded-full bg-ops-mint px-3 py-1 font-semibold text-emerald-800">{row.sla}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </article>
-
-          <article className="rounded-[2rem] bg-gradient-to-br from-ops-cyan to-sky-500 p-6 text-white shadow-lg">
-            <p className="text-sm uppercase tracking-[0.3em] text-white/70">Escalation Watch</p>
-            <h2 className="mt-3 text-2xl font-bold">Breach risk in Bangkok cluster</h2>
-            <div className="mt-6 space-y-4">
-              {[
-                "12 unclaimed cases older than 90 minutes",
-                "Doctor capacity below target by 2 slots",
-                "Recommend re-routing to adjacent provinces 11 and 12"
-              ].map((item) => (
-                <div key={item} className="rounded-[1.5rem] bg-white/15 p-4 backdrop-blur">
-                  {item}
+            <section className="mt-6 grid gap-6 lg:grid-cols-[1.45fr,1fr]">
+              <article className="rounded-[2rem] bg-white p-6 shadow-lg">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-ops-cyan">{TEXT.provinceTable}</p>
+                    <h2 className="text-2xl font-bold text-ops-navy">{TEXT.provinceHint}</h2>
+                  </div>
+                  <div className="text-sm text-slate-500">{provinceRows.length} {TEXT.activeProvinces}</div>
                 </div>
-              ))}
-            </div>
-          </article>
-        </section>
+
+                <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-slate-100">
+                  <table className="min-w-full border-collapse text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">{TEXT.province}</th>
+                        <th className="px-4 py-3">{TEXT.open}</th>
+                        <th className="px-4 py-3">{TEXT.risk}</th>
+                        <th className="px-4 py-3">{TEXT.doctors}</th>
+                        <th className="px-4 py-3">{TEXT.closedRate}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {provinceRows.map((row) => (
+                        <tr key={row.provinceCode} className="border-t border-slate-100">
+                          <td className="px-4 py-4 font-semibold text-ops-navy">{row.provinceCode}</td>
+                          <td className="px-4 py-4">{row.openCount}</td>
+                          <td className="px-4 py-4">{row.riskCount}</td>
+                          <td className="px-4 py-4">{row.doctorCount}</td>
+                          <td className="px-4 py-4">
+                            <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">{row.completionRate}%</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article className="rounded-[2rem] bg-gradient-to-br from-ops-cyan to-sky-500 p-6 text-white shadow-lg">
+                <p className="text-sm uppercase tracking-[0.3em] text-white/70">{TEXT.watchTitle}</p>
+                <h2 className="mt-3 text-2xl font-bold">{TEXT.appTitle}</h2>
+                <div className="mt-6 space-y-4">
+                  {watchItems.length > 0 ? watchItems.map((item) => (
+                    <div key={item.provinceCode} className="rounded-[1.5rem] bg-white/15 p-4 backdrop-blur">
+                      <div className="font-semibold">{TEXT.province} {item.provinceCode}</div>
+                      <div className="mt-2 text-sm text-white/85">{TEXT.open}: {item.openCount}</div>
+                      <div className="mt-1 text-sm text-white/85">{TEXT.risk}: {item.riskCount}</div>
+                      <div className="mt-1 text-sm text-white/85">{TEXT.doctors}: {item.doctorCount}</div>
+                    </div>
+                  )) : (
+                    <div className="rounded-[1.5rem] bg-white/15 p-4 backdrop-blur">{TEXT.watchEmpty}</div>
+                  )}
+                </div>
+              </article>
+            </section>
+          </>
+        )}
       </div>
     </main>
+  );
+}
+
+function MetricCard({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return (
+    <article className={`rounded-[1.75rem] ${tone} p-5 shadow-lg`}>
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-3 text-4xl font-extrabold text-ops-navy">{value}</p>
+    </article>
   );
 }

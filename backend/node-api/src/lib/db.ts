@@ -24,6 +24,13 @@ const DEFAULT_DOCTOR_CREDENTIALS = [
   }
 ] as const;
 
+const DEFAULT_ADMIN_CREDENTIALS = {
+  userId: "00000000-0000-0000-0000-000000000201",
+  username: "admin",
+  password: "admin123",
+  displayName: "Ops Admin"
+} as const;
+
 let doctorAuthReadyPromise: Promise<void> | null = null;
 
 process.on("SIGINT", async () => {
@@ -81,6 +88,32 @@ async function ensureDoctorAuthReady(): Promise<void> {
            WHERE id = $1`,
           [row.user_id, credential.username, hashPassword(credential.password)]
         );
+      }
+
+      const adminResult = await pool.query<{ id: string; username: string | null; password_hash: string | null }>(
+        `SELECT id, username, password_hash
+         FROM app_users
+         WHERE id = $1 AND role = 'admin'`,
+        [DEFAULT_ADMIN_CREDENTIALS.userId]
+      );
+
+      if (adminResult.rows.length > 0) {
+        const adminRow = adminResult.rows[0];
+        if (!adminRow.username || !adminRow.password_hash) {
+          await pool.query(
+            `UPDATE app_users
+             SET display_name = COALESCE(display_name, $2),
+                 username = COALESCE(username, $3),
+                 password_hash = COALESCE(password_hash, $4)
+             WHERE id = $1`,
+            [
+              adminRow.id,
+              DEFAULT_ADMIN_CREDENTIALS.displayName,
+              DEFAULT_ADMIN_CREDENTIALS.username,
+              hashPassword(DEFAULT_ADMIN_CREDENTIALS.password)
+            ]
+          );
+        }
       }
     })().catch((error) => {
       doctorAuthReadyPromise = null;
@@ -284,6 +317,41 @@ export async function listDoctors(): Promise<Doctor[]> {
     provinceCodes: row.province_codes ?? [],
     specialty: row.specialty as Doctor["specialty"]
   }));
+}
+
+export async function verifyAdminCredentials(input: {
+  username: string;
+  password: string;
+}): Promise<{ admin: { id: string; displayName: string } } | null> {
+  await ensureDoctorAuthReady();
+
+  const result = await pool.query<{
+    id: string;
+    display_name: string;
+    password_hash: string | null;
+  }>(
+    `SELECT id, display_name, password_hash
+     FROM app_users
+     WHERE role = 'admin' AND LOWER(username) = LOWER($1)
+     LIMIT 1`,
+    [input.username.trim()]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const row = result.rows[0];
+  if (!row.password_hash || !verifyPassword(input.password, row.password_hash)) {
+    return null;
+  }
+
+  return {
+    admin: {
+      id: row.id,
+      displayName: row.display_name
+    }
+  };
 }
 
 export async function getDoctorById(doctorId: string): Promise<Doctor | null> {
