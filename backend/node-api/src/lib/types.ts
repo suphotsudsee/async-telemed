@@ -1,4 +1,4 @@
-export type Role = "patient" | "doctor" | "admin";
+﻿export type Role = "patient" | "doctor" | "admin";
 
 export type ConsultationStatus =
   | "submitted"
@@ -25,6 +25,13 @@ export interface PatientProfile {
   provinceCode: string;
 }
 
+export interface PrescriptionItem {
+  medicationName: string;
+  dosage: string;
+  frequency: string;
+  durationDays: number;
+}
+
 export interface Consultation {
   id: string;
   patientId: string;
@@ -40,6 +47,10 @@ export interface Consultation {
   submittedAt: string;
   firstResponseDueAt: string;
   completionDueAt: string;
+  diagnosis?: string;
+  advice?: string;
+  prescriptionItems?: PrescriptionItem[];
+  respondedAt?: string;
 }
 
 export interface Doctor {
@@ -49,20 +60,13 @@ export interface Doctor {
   specialty: "dermatology";
 }
 
-export interface PrescriptionItem {
-  medicationName: string;
-  dosage: string;
-  frequency: string;
-  durationDays: number;
-}
-
 export interface ConsultationResponse {
   id: string;
   consultationId: string;
+  doctorId: string;
   diagnosis: string;
   advice: string;
   prescriptionItems: PrescriptionItem[];
   escalated: boolean;
   respondedAt: string;
 }
-

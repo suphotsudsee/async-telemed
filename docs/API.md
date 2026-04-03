@@ -1,4 +1,4 @@
-# API Overview
+﻿# API Overview
 
 ## Services
 
@@ -7,11 +7,7 @@
 - Handles authentication, patient intake, queue orchestration, prescriptions, webhooks, and admin metrics.
 - Exposes REST endpoints to frontends.
 - Stores operational data in PostgreSQL.
-
-### FastAPI Clinical Service
-
-- Supports image metadata processing, triage scoring, and clinical helper endpoints.
-- Designed so future ML services can sit behind the same API.
+- This is the backend service currently used by the running product.
 
 ## REST Surface
 

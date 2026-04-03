@@ -13,3 +13,15 @@ coverage/
 Thumbs.db
 *.log
 postgres-data/
+backend/node_modules
+frontend/node_modules
+logs
+*.log
+*.env 
+ืnode_modules
+postgres-data
+postgres-data-new/base
+postgres-data-new/global
+frontend-admin/node_modules
+frontend-doctor/node_modules
+frontend-patient/node_modules

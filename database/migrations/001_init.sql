@@ -7,6 +7,8 @@ CREATE TABLE app_users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     role user_role NOT NULL,
     display_name TEXT NOT NULL,
+    username TEXT NULL,
+    password_hash TEXT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -104,6 +106,8 @@ CREATE TABLE audit_logs (
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX idx_app_users_username_unique ON app_users (LOWER(username)) WHERE username IS NOT NULL;
 
 CREATE INDEX idx_consultations_status_priority ON consultations(status, priority_score DESC);
 CREATE INDEX idx_consultations_province_status ON consultations(province_code, status);

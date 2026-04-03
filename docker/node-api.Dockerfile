@@ -1,21 +1,22 @@
+# Node API Development Dockerfile
 FROM node:22-alpine
 
 WORKDIR /app
 
+# Install dependencies
 COPY package.json ./
-COPY backend/node-api/package.json backend/node-api/package.json
-COPY tsconfig.base.json tsconfig.base.json
-COPY backend/node-api/tsconfig.json backend/node-api/tsconfig.json
+COPY backend/node-api/package.json ./backend/node-api/
+COPY tsconfig.base.json ./
 
 RUN npm install
 
-COPY backend/node-api backend/node-api
+# Copy source code
+COPY backend/node-api ./backend/node-api
 
 WORKDIR /app/backend/node-api
 
-RUN npm run build
-
+# Expose port
 EXPOSE 8080
 
-CMD ["node", "dist/index.js"]
-
+# Run in development mode with tsx
+CMD ["npm", "run", "dev"]

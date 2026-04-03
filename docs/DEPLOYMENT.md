@@ -1,4 +1,4 @@
-# Deployment Notes
+﻿# Deployment Notes
 
 ## Local Stack
 
@@ -10,11 +10,10 @@ docker compose -f docker/docker-compose.yml up --build
 
 Services:
 
-- Patient app: `http://localhost:4173`
-- Doctor app: `http://localhost:4174`
-- Admin app: `http://localhost:4175`
+- Patient app: `http://localhost:5173`
+- Doctor app: `http://localhost:5174`
+- Admin app: `http://localhost:5175`
 - Node API: `http://localhost:8080`
-- FastAPI service: `http://localhost:8000`
 - PostgreSQL: `localhost:5432`
 
 ## Environment Expectations

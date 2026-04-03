@@ -1,20 +1,49 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import jwt from "jsonwebtoken";
 import { z } from "zod";
 import {
-  claimConsultation,
-  createConsultation,
-  createPatientProfile,
-  getConsultationById,
-  getDoctorQueue,
-  getRoutingCoverage,
-  getSlaSnapshot,
-  listConsultations,
-  respondToConsultation
+  claimConsultation as claimConsultationDb,
+  createConsultation as createConsultationDb,
+  createPatientProfile as createPatientProfileDb,
+  getConsultationById as getConsultationByIdDb,
+  getDoctorQueue as getDoctorQueueDb,
+  getRoutingCoverage as getRoutingCoverageDb,
+  getSlaSnapshot as getSlaSnapshotDb,
+  healthCheck as dbHealthCheck,
+  listConsultations as listConsultationsDb,
+  respondToConsultation as respondToConsultationDb,
+  verifyDoctorCredentials as verifyDoctorCredentialsDb
+} from "./lib/db.js";
+import {
+  claimConsultation as claimConsultationMock,
+  createConsultation as createConsultationMock,
+  createPatientProfile as createPatientProfileMock,
+  getConsultationById as getConsultationByIdMock,
+  getDoctorQueue as getDoctorQueueMock,
+  getRoutingCoverage as getRoutingCoverageMock,
+  getSlaSnapshot as getSlaSnapshotMock,
+  listConsultations as listConsultationsMock,
+  respondToConsultation as respondToConsultationMock,
+  verifyDoctorCredentials as verifyDoctorCredentialsMock
 } from "./lib/domain.js";
+import { generateToken, rateLimitByUser, requireAdmin, requireDoctor } from "./lib/auth.js";
+import { requestOtp, verifyOtp } from "./lib/otp.js";
+import { presignUpload } from "./lib/storage.js";
 import { isValidThaiId } from "./lib/thaiid.js";
+
+const USE_DATABASE = process.env.DATABASE_URL && process.env.DATABASE_URL !== "mock";
+
+const createPatientProfile = USE_DATABASE ? createPatientProfileDb : createPatientProfileMock;
+const createConsultation = USE_DATABASE ? createConsultationDb : createConsultationMock;
+const listConsultations = USE_DATABASE ? listConsultationsDb : listConsultationsMock;
+const getConsultationById = USE_DATABASE ? getConsultationByIdDb : getConsultationByIdMock;
+const getDoctorQueue = USE_DATABASE ? getDoctorQueueDb : getDoctorQueueMock;
+const claimConsultation = USE_DATABASE ? claimConsultationDb : claimConsultationMock;
+const respondToConsultation = USE_DATABASE ? respondToConsultationDb : respondToConsultationMock;
+const getRoutingCoverage = USE_DATABASE ? getRoutingCoverageDb : getRoutingCoverageMock;
+const getSlaSnapshot = USE_DATABASE ? getSlaSnapshotDb : getSlaSnapshotMock;
+const verifyDoctorCredentials = USE_DATABASE ? verifyDoctorCredentialsDb : verifyDoctorCredentialsMock;
 
 const authRequestSchema = z.object({
   thaiId: z.string(),
@@ -37,7 +66,12 @@ const consultationSchema = z.object({
   chiefComplaint: z.string().min(10),
   symptomDurationDays: z.number().int().min(0),
   redFlags: z.array(z.string()).default([]),
-  imageUrls: z.array(z.string().url()).min(1).max(5)
+  imageUrls: z.array(z.string().url()).min(0).max(5).default([])
+});
+
+const doctorLoginSchema = z.object({
+  username: z.string().min(3),
+  password: z.string().min(6)
 });
 
 const doctorResponseSchema = z.object({
@@ -56,156 +90,272 @@ const doctorResponseSchema = z.object({
     .default([])
 });
 
-function getEncryptionKey() {
-  return process.env.ENCRYPTION_KEY ??
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-}
+const uploadPresignSchema = z.object({
+  filename: z.string().min(1),
+  contentType: z.string().refine(
+    (val) => ["image/jpeg", "image/jpg", "image/png", "image/webp"].some((t) => val.includes(t)),
+    { message: "Only image files allowed (jpeg, png, webp)" }
+  ),
+  prefix: z.string().optional()
+});
 
 export function createApp() {
   const app = express();
-  app.use(helmet());
-  app.use(cors());
-  app.use(express.json({ limit: "2mb" }));
 
-  app.get("/health", (_request, response) => {
-    response.json({ status: "ok", service: "node-api" });
+  app.use(helmet());
+  app.use(cors({
+    origin: [
+      "http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176",
+      "http://localhost:5177", "http://localhost:5178", "http://localhost:5179", "http://localhost:5180",
+      "http://localhost:5181", "http://localhost:5182", "http://localhost:5183", "http://localhost:5184",
+      "http://localhost:5185", "http://localhost:4173", "http://localhost:4174", "http://localhost:4175", "*"
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+  }));
+  app.options("*", cors());
+  app.use(express.json({ limit: "10mb" }));
+
+  app.get("/health", async (_request, response) => {
+    if (USE_DATABASE) {
+      const dbOk = await dbHealthCheck();
+      response.json({
+        status: dbOk ? "ok" : "degraded",
+        service: "node-api",
+        database: dbOk ? "connected" : "disconnected",
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    response.json({
+      status: "ok",
+      service: "node-api",
+      database: "mock",
+      timestamp: new Date().toISOString()
+    });
   });
 
-  app.post("/api/v1/auth/thai-id/request-otp", (request, response) => {
+  app.post("/api/v1/auth/thai-id/request-otp", rateLimitByUser({ maxRequests: 5, windowMs: 300000 }), async (request, response) => {
     const payload = authRequestSchema.safeParse(request.body);
     if (!payload.success || !isValidThaiId(payload.data.thaiId)) {
       return response.status(400).json({ message: "Invalid Thai ID or phone number." });
     }
 
-    return response.json({
-      requestId: "otp-demo-request",
-      expiresInSeconds: 300,
-      maskedPhone: payload.data.phone.replace(/.(?=.{4})/g, "x")
-    });
+    try {
+      const otpResult = await requestOtp(payload.data.thaiId, payload.data.phone);
+      return response.json({
+        requestId: otpResult.requestId,
+        expiresInSeconds: otpResult.expiresInSeconds,
+        maskedPhone: otpResult.maskedPhone,
+        ...(otpResult.code ? { demoCode: otpResult.code } : {})
+      });
+    } catch (error) {
+      console.error("OTP request failed:", error);
+      return response.status(500).json({ message: "Failed to send OTP." });
+    }
   });
 
-  app.post("/api/v1/auth/thai-id/verify", (request, response) => {
+  app.post("/api/v1/auth/thai-id/verify", rateLimitByUser({ maxRequests: 3, windowMs: 300000 }), async (request, response) => {
     const payload = authVerifySchema.safeParse(request.body);
-    if (!payload.success || !isValidThaiId(payload.data.thaiId) || payload.data.otp !== "123456") {
-      return response.status(400).json({ message: "Verification failed." });
+    if (!payload.success || !isValidThaiId(payload.data.thaiId)) {
+      return response.status(400).json({ message: "Invalid request." });
     }
 
-    const patient = createPatientProfile({
-      ...payload.data,
-      encryptionKey: getEncryptionKey()
-    });
+    const verifyResult = await verifyOtp(payload.data.thaiId, payload.data.otp);
+    if (!verifyResult.success) {
+      return response.status(400).json({ message: verifyResult.message });
+    }
 
-    const token = jwt.sign(
-      {
+    try {
+      const patient = await createPatientProfile({
+        ...payload.data,
+        encryptionKey: process.env.ENCRYPTION_KEY ?? "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      });
+
+      const token = generateToken({
         sub: patient.id,
         role: "patient",
         provinceCode: patient.provinceCode
-      },
-      process.env.JWT_SECRET ?? "replace-me",
-      { expiresIn: "12h" }
-    );
+      });
 
-    return response.json({
-      token,
-      patientId: patient.id,
-      role: "patient"
-    });
+      return response.json({
+        token,
+        patientId: patient.id,
+        role: "patient"
+      });
+    } catch (error) {
+      console.error("Patient creation failed:", error);
+      return response.status(500).json({ message: "Failed to create patient profile." });
+    }
   });
 
-  app.get("/api/v1/auth/session", (_request, response) => {
-    response.json({
-      authenticated: true,
-      role: "patient",
-      displayName: "Demo Patient"
-    });
-  });
-
-  app.post("/api/v1/consultations", (request, response) => {
+  app.post("/api/v1/consultations", async (request, response) => {
     const payload = consultationSchema.safeParse(request.body);
     if (!payload.success) {
       return response.status(400).json({ message: payload.error.flatten() });
     }
 
-    const consultation = createConsultation(payload.data);
-    return response.status(201).json(consultation);
-  });
-
-  app.get("/api/v1/consultations", (_request, response) => {
-    response.json(listConsultations());
-  });
-
-  app.get("/api/v1/consultations/:id", (request, response) => {
-    const match = getConsultationById(request.params.id);
-    if (!match) {
-      return response.status(404).json({ message: "Consultation not found." });
+    try {
+      const consultation = await createConsultation(payload.data);
+      return response.status(201).json(consultation);
+    } catch (error) {
+      console.error("Consultation creation failed:", error);
+      return response.status(500).json({ message: "Failed to create consultation." });
     }
-    return response.json(match);
   });
 
-  app.post("/api/v1/uploads/presign", (_request, response) => {
-    response.json({
-      uploadUrl: "https://storage.example.com/presigned-upload",
-      publicUrl: "https://storage.example.com/final-object.jpg",
-      expiresInSeconds: 900
-    });
-  });
-
-  app.get("/api/v1/doctor/queue", (request, response) => {
-    const provinceCodes = String(request.query.provinces ?? "10,50")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-
-    response.json(getDoctorQueue(provinceCodes));
-  });
-
-  app.post("/api/v1/doctor/queue/:consultationId/claim", (request, response) => {
-    const consultation = claimConsultation(request.params.consultationId, String(request.body.doctorId ?? "doctor-bkk-1"));
-    if (!consultation) {
-      return response.status(404).json({ message: "Consultation not found." });
+  app.get("/api/v1/consultations", async (_request, response) => {
+    try {
+      const consultations = await listConsultations();
+      response.json(consultations);
+    } catch (error) {
+      console.error("Failed to list consultations:", error);
+      response.status(500).json({ message: "Failed to list consultations." });
     }
-    return response.json(consultation);
   });
 
-  app.post("/api/v1/doctor/consultations/:consultationId/respond", (request, response) => {
+  app.get("/api/v1/consultations/:id", async (request, response) => {
+    try {
+      const consultation = await getConsultationById(request.params.id);
+      if (!consultation) {
+        return response.status(404).json({ message: "Consultation not found." });
+      }
+      response.json(consultation);
+    } catch (error) {
+      console.error("Failed to get consultation:", error);
+      response.status(500).json({ message: "Failed to get consultation." });
+    }
+  });
+
+  app.post("/api/v1/uploads/presign", async (request, response) => {
+    const payload = uploadPresignSchema.safeParse(request.body);
+    if (!payload.success) {
+      return response.status(400).json({ message: payload.error.flatten() });
+    }
+
+    try {
+      const result = await presignUpload(payload.data);
+      response.json(result);
+    } catch (error) {
+      console.error("Failed to create upload presign:", error);
+      response.status(500).json({ message: "Failed to create upload URL." });
+    }
+  });
+
+  app.post("/api/v1/doctor/auth/login", async (request, response) => {
+    const payload = doctorLoginSchema.safeParse(request.body);
+    if (!payload.success) {
+      return response.status(400).json({ message: payload.error.flatten() });
+    }
+
+    try {
+      const session = await verifyDoctorCredentials(payload.data);
+      if (!session) {
+        return response.status(401).json({ message: "Invalid username or password." });
+      }
+
+      const token = generateToken({
+        sub: session.doctor.id,
+        role: "doctor",
+        provinceCode: session.activeProvinceCode
+      });
+
+      response.json({
+        token,
+        role: "doctor",
+        activeProvinceCode: session.activeProvinceCode,
+        doctor: session.doctor
+      });
+    } catch (error) {
+      console.error("Doctor login failed:", error);
+      response.status(500).json({ message: "Failed to sign in doctor." });
+    }
+  });
+
+  app.get("/api/v1/doctor/queue", requireDoctor, async (request, response) => {
+    const provinceCodes = [request.user?.provinceCode].filter((value): value is string => Boolean(value));
+
+    try {
+      const queue = await getDoctorQueue(provinceCodes);
+      response.json(queue);
+    } catch (error) {
+      console.error("Failed to get doctor queue:", error);
+      response.status(500).json({ message: "Failed to get queue." });
+    }
+  });
+
+  app.post("/api/v1/doctor/queue/:consultationId/claim", requireDoctor, async (request, response) => {
+    try {
+      const consultation = await claimConsultation({
+        consultationId: String(request.params.consultationId),
+        doctorId: request.user!.sub
+      });
+
+      if (!consultation) {
+        return response.status(404).json({ message: "Consultation not found." });
+      }
+
+      response.json(consultation);
+    } catch (error) {
+      console.error("Failed to claim consultation:", error);
+      response.status(500).json({ message: "Failed to claim consultation." });
+    }
+  });
+
+  app.post("/api/v1/doctor/consultations/:consultationId/respond", requireDoctor, async (request, response) => {
     const payload = doctorResponseSchema.safeParse(request.body);
     if (!payload.success) {
       return response.status(400).json({ message: payload.error.flatten() });
     }
 
-    const result = respondToConsultation({
-      consultationId: request.params.consultationId,
-      ...payload.data
-    });
+    try {
+      const result = await respondToConsultation({
+        consultationId: String(request.params.consultationId),
+        doctorId: request.user!.sub,
+        diagnosis: payload.data.diagnosis,
+        advice: payload.data.advice,
+        escalated: payload.data.escalated,
+        prescriptionItems: payload.data.prescriptionItems
+      });
 
-    if (!result) {
-      return response.status(404).json({ message: "Consultation not found." });
+      if (!result) {
+        return response.status(404).json({ message: "Consultation not found." });
+      }
+
+      const consultation = await getConsultationById(String(request.params.consultationId));
+      response.json({ response: result, consultation });
+    } catch (error) {
+      console.error("Failed to respond to consultation:", error);
+      response.status(500).json({ message: "Failed to save doctor response." });
     }
-    return response.json(result);
   });
 
-  app.get("/api/v1/admin/sla", (_request, response) => {
-    response.json({
-      generatedAt: new Date().toISOString(),
-      items: getSlaSnapshot()
-    });
-  });
-
-  app.get("/api/v1/admin/routing", (_request, response) => {
-    response.json(getRoutingCoverage());
-  });
-
-  app.post("/api/v1/webhooks/line", (request, response) => {
-    const signature = request.header("x-line-signature");
-    if (!signature) {
-      return response.status(401).json({ message: "Missing LINE signature." });
+  app.get("/api/v1/admin/sla", requireAdmin, async (_request, response) => {
+    try {
+      const items = await getSlaSnapshot();
+      response.json({ generatedAt: new Date().toISOString(), items });
+    } catch (error) {
+      console.error("Failed to get SLA snapshot:", error);
+      response.status(500).json({ message: "Failed to get SLA data." });
     }
-    return response.json({
-      accepted: true,
-      eventCount: Array.isArray(request.body?.events) ? request.body.events.length : 0
-    });
+  });
+
+  app.get("/api/v1/admin/routing", async (request, response) => {
+    const provinceCodes = String(request.query.provinces ?? "10,50")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    try {
+      const items = await getRoutingCoverage(provinceCodes);
+      response.json(items);
+    } catch (error) {
+      console.error("Failed to get routing coverage:", error);
+      response.status(500).json({ message: "Failed to get routing coverage." });
+    }
   });
 
   return app;
 }
-

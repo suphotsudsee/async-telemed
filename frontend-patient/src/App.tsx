@@ -1,172 +1,199 @@
-import { useState } from "react";
+﻿import { useCallback, useState } from 'react';
+import LoginScreen from './components/LoginScreen';
+import ConsultationForm, { ConsultationData } from './components/ConsultationForm';
+import HistoryScreen, { saveConsultationHistoryItem } from './components/HistoryScreen';
+import ResultScreen from './components/ResultScreen';
+import StatusScreen from './components/StatusScreen';
 
-const apiBase = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
+const HISTORY_BUTTON_TEXT = '\u0e1b\u0e23\u0e30\u0e27\u0e31\u0e15\u0e34\u0e04\u0e33\u0e02\u0e2d';
 
-const provinceOptions = [
-  { code: "10", label: "Bangkok" },
-  { code: "50", label: "Chiang Mai" },
-  { code: "83", label: "Phuket" }
-];
+type AppState =
+  | { status: 'login' }
+  | { status: 'consultation'; patientId: string; displayName: string }
+  | { status: 'history'; patientId: string; displayName: string }
+  | { status: 'result'; patientId: string; consultationId: string; data: ConsultationData }
+  | { status: 'status'; patientId: string; consultationId: string; data: ConsultationData; returnTo: 'result' | 'history' };
 
-const redFlagOptions = ["fever", "rapid-spread", "facial-swelling", "drug-reaction"];
+const EMPTY_DATA: ConsultationData = {
+  patientId: '',
+  provinceCode: '',
+  chiefComplaint: '',
+  symptomDurationDays: 0,
+  redFlags: [],
+  imageUrls: []
+};
 
 export default function App() {
-  const [thaiId, setThaiId] = useState("1101700203451");
-  const [provinceCode, setProvinceCode] = useState("10");
-  const [chiefComplaint, setChiefComplaint] = useState("Red itchy rash after new cosmetic product");
-  const [submittedId, setSubmittedId] = useState<string | null>(null);
-  const [selectedFlags, setSelectedFlags] = useState<string[]>(["rapid-spread"]);
+  const [state, setState] = useState<AppState>({ status: 'login' });
 
-  async function submitConsultation() {
-    const response = await fetch(`${apiBase}/api/v1/consultations`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        patientId: "patient-demo-liff",
-        provinceCode,
-        chiefComplaint,
-        symptomDurationDays: 3,
-        redFlags: selectedFlags,
-        imageUrls: ["https://example.com/mock-derm-image.jpg"]
-      })
+  const handleLogin = useCallback((userId: string, profile: { displayName: string; pictureUrl?: string }) => {
+    setState({ status: 'consultation', patientId: userId, displayName: profile.displayName });
+  }, []);
+
+  const handleSubmit = useCallback(async (data: ConsultationData): Promise<void> => {
+    if (state.status !== 'consultation') return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/consultations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit consultation');
+      }
+
+      const result = await response.json();
+      saveConsultationHistoryItem({
+        id: result.id,
+        patientId: state.patientId,
+        chiefComplaint: data.chiefComplaint,
+        provinceCode: data.provinceCode,
+        submittedAt: result.submittedAt ?? new Date().toISOString()
+      });
+
+      setState({
+        status: 'result',
+        patientId: state.patientId,
+        consultationId: result.id,
+        data
+      });
+    } catch (error) {
+      alert('\u0e40\u0e01\u0e34\u0e14\u0e02\u0e49\u0e2d\u0e1c\u0e34\u0e14\u0e1e\u0e25\u0e32\u0e14\u0e43\u0e19\u0e01\u0e32\u0e23\u0e2a\u0e48\u0e07\u0e04\u0e33\u0e02\u0e2d \u0e01\u0e23\u0e38\u0e13\u0e32\u0e25\u0e2d\u0e07\u0e43\u0e2b\u0e21\u0e48\u0e2d\u0e35\u0e01\u0e04\u0e23\u0e31\u0e49\u0e07');
+      throw error;
+    }
+  }, [state]);
+
+  const handleNewConsultation = useCallback(() => {
+    if (state.status !== 'result') return;
+    setState({ status: 'consultation', patientId: state.patientId, displayName: 'User' });
+  }, [state]);
+
+  const handleViewHistory = useCallback(() => {
+    if (state.status === 'login') return;
+    setState({
+      status: 'history',
+      patientId: state.patientId,
+      displayName: 'displayName' in state ? state.displayName : 'User'
     });
+  }, [state]);
 
-    const payload = await response.json();
-    setSubmittedId(payload.id);
+  const handleViewStatus = useCallback(() => {
+    if (state.status !== 'result') return;
+
+    if (!state.consultationId) {
+      alert('\u0e44\u0e21\u0e48\u0e21\u0e35\u0e2b\u0e21\u0e32\u0e22\u0e40\u0e25\u0e02\u0e04\u0e33\u0e02\u0e2d \u0e01\u0e23\u0e38\u0e13\u0e32\u0e25\u0e2d\u0e07\u0e43\u0e2b\u0e21\u0e48\u0e2d\u0e35\u0e01\u0e04\u0e23\u0e31\u0e49\u0e07');
+      return;
+    }
+
+    setState({
+      status: 'status',
+      consultationId: state.consultationId,
+      patientId: state.patientId,
+      data: state.data,
+      returnTo: 'result'
+    });
+  }, [state]);
+
+  const handleBackFromStatus = useCallback(() => {
+    if (state.status !== 'status') return;
+
+    if (state.returnTo === 'history') {
+      setState({
+        status: 'history',
+        patientId: state.patientId,
+        displayName: 'User'
+      });
+      return;
+    }
+
+    setState({
+      status: 'result',
+      patientId: state.patientId,
+      consultationId: state.consultationId,
+      data: state.data
+    });
+  }, [state]);
+
+  const handleBackFromHistory = useCallback(() => {
+    if (state.status !== 'history') return;
+    setState({
+      status: 'consultation',
+      patientId: state.patientId,
+      displayName: state.displayName
+    });
+  }, [state]);
+
+  const handleOpenHistoryConsultation = useCallback((consultationId: string) => {
+    if (state.status !== 'history') return;
+    setState({
+      status: 'status',
+      consultationId,
+      patientId: state.patientId,
+      data: { ...EMPTY_DATA, patientId: state.patientId },
+      returnTo: 'history'
+    });
+  }, [state]);
+
+  if (state.status === 'login') {
+    return <LoginScreen onLogin={handleLogin} />;
   }
 
-  function toggleFlag(flag: string) {
-    setSelectedFlags((current) =>
-      current.includes(flag) ? current.filter((item) => item !== flag) : [...current, flag]
+  if (state.status === 'consultation') {
+    return (
+      <>
+        <ConsultationForm patientId={state.patientId} onSubmit={handleSubmit} />
+        <button
+          onClick={handleViewHistory}
+          className="fixed right-4 top-4 z-50 rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white backdrop-blur transition-colors hover:bg-white/25"
+        >
+          {HISTORY_BUTTON_TEXT}
+        </button>
+      </>
     );
   }
 
-  return (
-    <main className="min-h-screen px-4 py-6 text-brand-ink">
-      <div className="mx-auto flex max-w-md flex-col gap-5">
-        <section className="overflow-hidden rounded-[2rem] bg-brand-ink px-6 py-7 text-white shadow-soft">
-          <p className="text-sm uppercase tracking-[0.3em] text-brand-sky/70">LINE LIFF</p>
-          <h1 className="mt-3 text-3xl font-semibold">Dermatology consult in a few minutes</h1>
-          <p className="mt-3 text-sm text-white/80">
-            Thai ID verified intake, image upload, and provincial doctor routing for asynchronous care.
-          </p>
-          <div className="mt-5 rounded-2xl bg-white/10 p-4 text-sm">
-            <div className="flex items-center justify-between">
-              <span>Thai ID</span>
-              <span>{thaiId}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span>LIFF status</span>
-              <span className="rounded-full bg-emerald-400/20 px-3 py-1 text-emerald-200">Connected</span>
-            </div>
-          </div>
-        </section>
+  if (state.status === 'history') {
+    return (
+      <HistoryScreen
+        patientId={state.patientId}
+        onBack={handleBackFromHistory}
+        onOpenConsultation={handleOpenHistoryConsultation}
+      />
+    );
+  }
 
-        <section className="rounded-[2rem] bg-white p-5 shadow-soft">
-          <div className="mb-4">
-            <p className="text-sm font-medium text-brand-leaf">Step 1</p>
-            <h2 className="text-xl font-semibold">Patient intake</h2>
-          </div>
+  if (state.status === 'result') {
+    return (
+      <ResultScreen
+        consultationId={state.consultationId}
+        data={state.data}
+        onNewConsultation={handleNewConsultation}
+        onViewStatus={handleViewStatus}
+        onViewHistory={handleViewHistory}
+      />
+    );
+  }
 
-          <label className="mb-3 block">
-            <span className="mb-2 block text-sm text-slate-600">Thai Citizen ID</span>
-            <input
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3"
-              value={thaiId}
-              onChange={(event) => setThaiId(event.target.value)}
-            />
-          </label>
+  if (state.status === 'status') {
+    return (
+      <>
+        <StatusScreen
+          consultationId={state.consultationId}
+          onBack={handleBackFromStatus}
+          data={state.data}
+        />
+        <button
+          onClick={handleViewHistory}
+          className="fixed right-4 top-4 z-50 rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white backdrop-blur transition-colors hover:bg-white/25"
+        >
+          {HISTORY_BUTTON_TEXT}
+        </button>
+      </>
+    );
+  }
 
-          <label className="mb-3 block">
-            <span className="mb-2 block text-sm text-slate-600">Province</span>
-            <select
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3"
-              value={provinceCode}
-              onChange={(event) => setProvinceCode(event.target.value)}
-            >
-              {provinceOptions.map((province) => (
-                <option key={province.code} value={province.code}>
-                  {province.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="mb-4 block">
-            <span className="mb-2 block text-sm text-slate-600">Chief complaint</span>
-            <textarea
-              className="min-h-28 w-full rounded-2xl border border-slate-200 px-4 py-3"
-              value={chiefComplaint}
-              onChange={(event) => setChiefComplaint(event.target.value)}
-            />
-          </label>
-
-          <div className="mb-5">
-            <span className="mb-2 block text-sm text-slate-600">Red flags</span>
-            <div className="flex flex-wrap gap-2">
-              {redFlagOptions.map((flag) => {
-                const active = selectedFlags.includes(flag);
-                return (
-                  <button
-                    key={flag}
-                    type="button"
-                    onClick={() => toggleFlag(flag)}
-                    className={`rounded-full px-4 py-2 text-sm transition ${
-                      active ? "bg-brand-alert text-white" : "bg-brand-sky text-brand-ink"
-                    }`}
-                  >
-                    {flag}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-dashed border-brand-leaf/40 bg-brand-leaf/5 p-4 text-sm text-slate-700">
-            Image upload flow is wired for presigned URLs. In production this card is replaced by LIFF camera or gallery capture.
-          </div>
-
-          <button
-            type="button"
-            onClick={submitConsultation}
-            className="mt-5 w-full rounded-2xl bg-brand-leaf px-4 py-3 font-medium text-white"
-          >
-            Submit consultation
-          </button>
-        </section>
-
-        <section className="rounded-[2rem] bg-[#fff9f0] p-5 shadow-soft">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-brand-leaf">Step 2</p>
-              <h2 className="text-xl font-semibold">Case progress</h2>
-            </div>
-            <span className="rounded-full bg-white px-3 py-1 text-sm">SLA 4h</span>
-          </div>
-
-          <div className="mt-4 grid gap-3">
-            {[
-              "Identity verified",
-              "Dermatology request submitted",
-              "Provincial routing to doctor pool",
-              "Doctor review and e-Prescription"
-            ].map((item, index) => (
-              <div key={item} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-ink text-sm text-white">
-                  {index + 1}
-                </div>
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
-
-          {submittedId ? (
-            <p className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              Consultation created: {submittedId}
-            </p>
-          ) : null}
-        </section>
-      </div>
-    </main>
-  );
+  return null;
 }

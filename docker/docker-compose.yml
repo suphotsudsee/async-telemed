@@ -1,7 +1,8 @@
 services:
+  # PostgreSQL Database
   postgres:
-    image: postgres:16
-    container_name: telemed-postgres
+    image: postgres:16-alpine
+    container_name: telemed-db
     environment:
       POSTGRES_DB: telemed
       POSTGRES_USER: telemed
@@ -9,60 +10,90 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ../postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
       - ../database/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telemed"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - telemed-network
 
+  # Node.js Backend API
   node-api:
     build:
       context: ..
       dockerfile: docker/node-api.Dockerfile
+    container_name: telemed-api
     environment:
       PORT: 8080
-      JWT_SECRET: replace-me
-      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      FASTAPI_URL: http://fastapi:8000
-      LINE_CHANNEL_SECRET: replace-me
+      NODE_ENV: development
       DATABASE_URL: postgresql://telemed:telemed@postgres:5432/telemed
+      JWT_SECRET: dev-secret-change-in-production
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      OTP_MODE: demo
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:4173,http://localhost:4174,http://localhost:4175"
     ports:
       - "8080:8080"
     depends_on:
-      - postgres
-      - fastapi
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../backend/node-api/src:/app/backend/node-api/src
+      - ../backend/node-api/package.json:/app/backend/node-api/package.json
+    networks:
+      - telemed-network
 
-  fastapi:
-    build:
-      context: ..
-      dockerfile: docker/fastapi.Dockerfile
-    ports:
-      - "8000:8000"
 
+  # Patient Frontend (LINE LIFF)
   patient-ui:
     build:
       context: ..
-      dockerfile: docker/frontend.Dockerfile
+      dockerfile: docker/patient.Dockerfile
       args:
-        APP_NAME: frontend-patient
         VITE_API_URL: http://localhost:8080
+    container_name: telemed-patient
     ports:
-      - "4173:80"
+      - "5173:80"
+    depends_on:
+      - node-api
+    networks:
+      - telemed-network
 
+  # Doctor Frontend
   doctor-ui:
     build:
       context: ..
-      dockerfile: docker/frontend.Dockerfile
+      dockerfile: docker/doctor.Dockerfile
       args:
-        APP_NAME: frontend-doctor
         VITE_API_URL: http://localhost:8080
+    container_name: telemed-doctor
     ports:
-      - "4174:80"
+      - "5174:80"
+    depends_on:
+      - node-api
+    networks:
+      - telemed-network
 
+  # Admin Frontend
   admin-ui:
     build:
       context: ..
-      dockerfile: docker/frontend.Dockerfile
+      dockerfile: docker/admin.Dockerfile
       args:
-        APP_NAME: frontend-admin
         VITE_API_URL: http://localhost:8080
+    container_name: telemed-admin
     ports:
-      - "4175:80"
+      - "5175:80"
+    depends_on:
+      - node-api
+    networks:
+      - telemed-network
 
+volumes:
+  postgres-data:
+
+networks:
+  telemed-network:
+    driver: bridge

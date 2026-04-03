@@ -1,0 +1,46 @@
+# Test API Endpoints
+
+### Health Check
+GET http://localhost:8080/health
+
+### Request OTP
+POST http://localhost:8080/api/v1/auth/thai-id/request-otp
+Content-Type: application/json
+
+{
+  "thaiId": "1101700203451",
+  "phone": "0812345678"
+}
+
+### Verify OTP (Demo mode - use "123456")
+POST http://localhost:8080/api/v1/auth/thai-id/verify
+Content-Type: application/json
+
+{
+  "thaiId": "1101700203451",
+  "otp": "123456",
+  "firstName": "Test",
+  "lastName": "User",
+  "phone": "0812345678",
+  "lineUserId": "U-test-001",
+  "provinceCode": "10"
+}
+
+### Create Consultation
+POST http://localhost:8080/api/v1/consultations
+Content-Type: application/json
+
+{
+  "patientId": "test-patient-001",
+  "provinceCode": "10",
+  "chiefComplaint": "ผื่นแดงคันบริเวณแขน",
+  "symptomDurationDays": 3,
+  "redFlags": ["rapid-spread"],
+  "imageUrls": ["https://example.com/image1.jpg"]
+}
+
+### List Consultations
+GET http://localhost:8080/api/v1/consultations
+
+### Get Doctor Queue
+GET http://localhost:8080/api/v1/doctor/queue?provinces=10,50
