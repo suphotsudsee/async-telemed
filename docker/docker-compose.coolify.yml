@@ -44,8 +44,8 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-    expose:
-      - "8080"
+    ports:
+      - "${API_PORT:-8080}:8080"
 
   patient-ui:
     build:
@@ -59,8 +59,8 @@ services:
     depends_on:
       node-api:
         condition: service_healthy
-    expose:
-      - "80"
+    ports:
+      - "${PATIENT_PORT:-5173}:80"
 
   doctor-ui:
     build:
@@ -71,8 +71,8 @@ services:
     depends_on:
       node-api:
         condition: service_healthy
-    expose:
-      - "80"
+    ports:
+      - "${DOCTOR_PORT:-5174}:80"
 
   admin-ui:
     build:
@@ -83,8 +83,8 @@ services:
     depends_on:
       node-api:
         condition: service_healthy
-    expose:
-      - "80"
+    ports:
+      - "${ADMIN_PORT:-5175}:80"
 
 volumes:
   coolify_postgres_data:
