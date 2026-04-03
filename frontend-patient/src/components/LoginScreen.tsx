@@ -1,12 +1,29 @@
-import { useEffect } from 'react';
+﻿import { useEffect } from 'react';
 import useLiff from '../hooks/useLiff';
 
 interface LoginScreenProps {
   onLogin: (userId: string, profile: { displayName: string; pictureUrl?: string }) => void;
 }
 
+const TEXT = {
+  loading: 'กำลังเชื่อมต่อ LINE Mini App...',
+  errorTitle: 'เปิด LINE Mini App ไม่สำเร็จ',
+  retry: 'ลองใหม่อีกครั้ง',
+  welcome: 'พร้อมเริ่มใช้งานแล้ว',
+  entering: 'กำลังเข้าสู่ระบบ...',
+  title: 'ปรึกษาแพทย์ผ่าน LINE',
+  subtitle: 'ส่งอาการ รูปภาพ และติดตามผลการประเมินได้ใน LINE Mini App เดียว',
+  lineOnly: 'สำหรับการใช้งานจริงใน LINE Mini App ให้ตั้งค่า LIFF ID และเปิดผ่าน LINE OA/แชตที่เชื่อม LIFF ไว้',
+  mockMode: 'กำลังทำงานในโหมดทดสอบนอก LINE',
+  inLine: 'เปิดอยู่ใน LINE แล้ว',
+  signIn: 'เข้าสู่ระบบด้วย LINE',
+  featureOne: 'เข้าสู่ระบบด้วยบัญชี LINE อัตโนมัติ',
+  featureTwo: 'ส่งรูปอาการและติดตามสถานะคำขอได้ทันที',
+  featureThree: 'ใช้งานต่อเนื่องในแอป LINE โดยไม่ต้องเปิดเว็บแยก'
+} as const;
+
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
-  const { isLoggedIn, profile, userId, isLoading, error, login } = useLiff();
+  const { isLoggedIn, profile, userId, isLoading, error, login, isInClient, isMockMode } = useLiff();
 
   useEffect(() => {
     if (isLoggedIn && userId && profile) {
@@ -21,8 +38,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     return (
       <main className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-brand-ink to-brand-navy">
         <div className="text-center text-white">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-white/30 border-t-white mx-auto mb-4"></div>
-          <p className="text-lg">กำลังโหลด...</p>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-white/30 border-t-white"></div>
+          <p className="text-lg">{TEXT.loading}</p>
         </div>
       </main>
     );
@@ -31,15 +48,15 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   if (error) {
     return (
       <main className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-brand-ink to-brand-navy">
-        <div className="bg-white/10 backdrop-blur rounded-3xl p-8 max-w-md w-full text-center">
-          <div className="text-5xl mb-4">⚠️</div>
-          <h1 className="text-2xl font-semibold text-white mb-2">เกิดข้อผิดพลาด</h1>
-          <p className="text-white/70 mb-6">{error}</p>
+        <div className="w-full max-w-md rounded-3xl bg-white/10 p-8 text-center backdrop-blur">
+          <div className="mb-4 text-5xl">!</div>
+          <h1 className="mb-2 text-2xl font-semibold text-white">{TEXT.errorTitle}</h1>
+          <p className="mb-6 text-white/70">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="w-full bg-white text-brand-ink font-medium py-3 rounded-2xl hover:bg-white/90 transition"
+            className="w-full rounded-2xl bg-white py-3 font-medium text-brand-ink transition hover:bg-white/90"
           >
-            ลองใหม่อีกครั้ง
+            {TEXT.retry}
           </button>
         </div>
       </main>
@@ -49,10 +66,10 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   if (isLoggedIn && profile) {
     return (
       <main className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-brand-ink to-brand-navy">
-        <div className="bg-white/10 backdrop-blur rounded-3xl p-8 max-w-md w-full text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-white/30 border-t-white mx-auto mb-4"></div>
-          <p className="text-lg text-white">ยินดีต้อนรับ, {profile.displayName}</p>
-          <p className="text-white/60 text-sm mt-2">กำลังเข้าสู่ระบบ...</p>
+        <div className="w-full max-w-md rounded-3xl bg-white/10 p-8 text-center backdrop-blur">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-white/30 border-t-white"></div>
+          <p className="text-lg text-white">{TEXT.welcome} {profile.displayName}</p>
+          <p className="mt-2 text-sm text-white/60">{TEXT.entering}</p>
         </div>
       </main>
     );
@@ -60,49 +77,37 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-brand-ink to-brand-navy">
-      <div className="bg-white/10 backdrop-blur rounded-3xl p-8 max-w-md w-full text-center">
-        {/* Logo */}
-        <div className="text-6xl mb-6">🩺</div>
-        
-        <h1 className="text-3xl font-bold text-white mb-2">Telemed</h1>
-        <p className="text-white/70 mb-8">
-          ปรึกษาแพทย์ผิวหนังออนไลน์<br />
-          สะดวก รวดเร็ว ปลอดภัย
-        </p>
+      <div className="w-full max-w-md rounded-3xl bg-white/10 p-8 text-center backdrop-blur">
+        <div className="mb-6 text-6xl">LINE</div>
 
-        {/* Features */}
-        <div className="space-y-3 mb-8 text-left">
-          <FeatureItem icon="📱" text="ถ่ายรูปผิวหนัง ส่งให้แพทย์" />
-          <FeatureItem icon="⏰" text="ตอบกลับภายใน 4 ชั่วโมง" />
-          <FeatureItem icon="💊" text="รับใบสั่งยา e-Prescription" />
-          <FeatureItem icon="🔒" text="เข้ารหัสข้อมูล ปลอดภัยตาม PDPA" />
+        <h1 className="mb-2 text-3xl font-bold text-white">{TEXT.title}</h1>
+        <p className="mb-6 text-white/70">{TEXT.subtitle}</p>
+
+        <div className="mb-6 space-y-3 text-left">
+          <FeatureItem text={TEXT.featureOne} />
+          <FeatureItem text={TEXT.featureTwo} />
+          <FeatureItem text={TEXT.featureThree} />
         </div>
 
-        {/* Login Button */}
+        <div className="mb-6 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white/75">
+          <div>{isMockMode ? TEXT.mockMode : isInClient ? TEXT.inLine : TEXT.lineOnly}</div>
+        </div>
+
         <button
           onClick={login}
-          className="w-full bg-[#06C755] hover:bg-[#05A248] text-white font-medium py-4 rounded-2xl transition flex items-center justify-center gap-3"
+          className="w-full rounded-2xl bg-[#06C755] py-4 font-medium text-white transition hover:bg-[#05A248]"
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19.5 12c0-4.14-3.36-7.5-7.5-7.5S4.5 7.86 4.5 12c0 3.72 2.71 6.8 6.25 7.39v-5.22H8.75V12h2v-1.67c0-1.98 1.18-3.08 2.99-3.08.86 0 1.77.15 1.77.15v1.96h-1c-.98 0-1.28.61-1.28 1.23V12h2.17l-.35 2.17h-1.82v5.22c3.54-.59 6.27-3.67 6.27-7.39z"/>
-          </svg>
-          เข้าสู่ระบบด้วย LINE
+          {TEXT.signIn}
         </button>
-
-        <p className="text-white/50 text-xs mt-6">
-          กดเข้าสู่ระบบเพื่อยืนยันตัวตน<br />
-          และใช้บริการตรวจทางไกล
-        </p>
       </div>
     </main>
   );
 }
 
-function FeatureItem({ icon, text }: { icon: string; text: string }) {
+function FeatureItem({ text }: { text: string }) {
   return (
-    <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3">
-      <span className="text-2xl">{icon}</span>
-      <span className="text-white/90">{text}</span>
+    <div className="rounded-xl bg-white/5 px-4 py-3 text-white/90">
+      {text}
     </div>
   );
 }

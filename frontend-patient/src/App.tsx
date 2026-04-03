@@ -12,8 +12,8 @@ type AppState =
   | { status: 'login' }
   | { status: 'consultation'; patientId: string; displayName: string }
   | { status: 'history'; patientId: string; displayName: string }
-  | { status: 'result'; patientId: string; consultationId: string; data: ConsultationData }
-  | { status: 'status'; patientId: string; consultationId: string; data: ConsultationData; returnTo: 'result' | 'history' };
+  | { status: 'result'; patientId: string; displayName: string; consultationId: string; data: ConsultationData }
+  | { status: 'status'; patientId: string; displayName: string; consultationId: string; data: ConsultationData; returnTo: 'result' | 'history' };
 
 const EMPTY_DATA: ConsultationData = {
   patientId: '',
@@ -57,6 +57,7 @@ export default function App() {
       setState({
         status: 'result',
         patientId: state.patientId,
+        displayName: state.displayName,
         consultationId: result.id,
         data
       });
@@ -68,7 +69,7 @@ export default function App() {
 
   const handleNewConsultation = useCallback(() => {
     if (state.status !== 'result') return;
-    setState({ status: 'consultation', patientId: state.patientId, displayName: 'User' });
+    setState({ status: 'consultation', patientId: state.patientId, displayName: state.displayName });
   }, [state]);
 
   const handleViewHistory = useCallback(() => {
@@ -76,7 +77,7 @@ export default function App() {
     setState({
       status: 'history',
       patientId: state.patientId,
-      displayName: 'displayName' in state ? state.displayName : 'User'
+      displayName: 'displayName' in state ? state.displayName : 'LINE User'
     });
   }, [state]);
 
@@ -92,6 +93,7 @@ export default function App() {
       status: 'status',
       consultationId: state.consultationId,
       patientId: state.patientId,
+      displayName: state.displayName,
       data: state.data,
       returnTo: 'result'
     });
@@ -104,7 +106,7 @@ export default function App() {
       setState({
         status: 'history',
         patientId: state.patientId,
-        displayName: 'User'
+        displayName: state.displayName
       });
       return;
     }
@@ -112,6 +114,7 @@ export default function App() {
     setState({
       status: 'result',
       patientId: state.patientId,
+      displayName: state.displayName,
       consultationId: state.consultationId,
       data: state.data
     });
@@ -132,6 +135,7 @@ export default function App() {
       status: 'status',
       consultationId,
       patientId: state.patientId,
+      displayName: state.displayName,
       data: { ...EMPTY_DATA, patientId: state.patientId },
       returnTo: 'history'
     });

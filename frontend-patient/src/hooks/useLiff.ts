@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import liff from '@line/liff';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-// LIFF types
 interface LiffProfile {
   userId: string;
   displayName: string;
@@ -9,7 +9,10 @@ interface LiffProfile {
 }
 
 interface LiffContext {
+  isReady: boolean;
   isLoggedIn: boolean;
+  isInClient: boolean;
+  isMockMode: boolean;
   profile: LiffProfile | null;
   userId: string | null;
   isLoading: boolean;
@@ -19,94 +22,139 @@ interface LiffContext {
   closeWindow: () => void;
 }
 
-// Mock profile for development
 const MOCK_PROFILE: LiffProfile = {
   userId: 'U-demo-001',
   displayName: 'Demo User',
   pictureUrl: 'https://via.placeholder.com/100',
-  statusMessage: 'Testing LIFF integration'
+  statusMessage: 'Mock LIFF mode'
 };
 
-// Check if running in LINE
-function isLineEnvironment(): boolean {
-  if (typeof window === 'undefined') return false;
-  return /Line/.test(navigator.userAgent) || window.location.search.includes('liff.state');
+function parseBooleanEnv(value: string | undefined, fallback = false) {
+  if (!value) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+}
+
+function getRedirectUri() {
+  return import.meta.env.VITE_LIFF_URL?.trim() || window.location.href;
 }
 
 export function useLiff(): LiffContext {
+  const liffId = import.meta.env.VITE_LIFF_ID?.trim();
+  const isMockMode = useMemo(
+    () => parseBooleanEnv(import.meta.env.VITE_LIFF_MOCK, import.meta.env.DEV && !liffId),
+    [liffId]
+  );
+
+  const [isReady, setIsReady] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isInClient, setIsInClient] = useState(false);
   const [profile, setProfile] = useState<LiffProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // LIFF ID from environment
-  const liffId = import.meta.env.VITE_LIFF_ID;
-
   useEffect(() => {
-    // If no LIFF ID or not in LINE, use mock
-    if (!liffId || !isLineEnvironment()) {
-      console.log('[LIFF] Running in development/mock mode');
-      setProfile(MOCK_PROFILE);
-      setIsLoggedIn(true);
-      setIsLoading(false);
-      return;
-    }
+    let isMounted = true;
 
-    // In production, load LIFF SDK dynamically
-    const loadLiff = async () => {
+    async function bootstrap() {
+      if (isMockMode) {
+        if (!isMounted) return;
+        setProfile(MOCK_PROFILE);
+        setIsLoggedIn(true);
+        setIsReady(true);
+        setIsInClient(false);
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+
+      if (!liffId) {
+        if (!isMounted) return;
+        setError('\u0e22\u0e31\u0e07\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49\u0e15\u0e31\u0e49\u0e07\u0e04\u0e48\u0e32 LIFF ID \u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a LINE Mini App');
+        setIsLoading(false);
+        return;
+      }
+
       try {
-        // @ts-ignore - LIFF loads globally
-        const liff = window.liff;
-        
-        if (!liff) {
-          throw new Error('LIFF SDK not loaded');
-        }
+        await liff.init({
+          liffId,
+          withLoginOnExternalBrowser: true
+        });
 
-        await liff.init({ liffId });
+        if (!isMounted) return;
+
+        setIsReady(true);
+        setIsInClient(liff.isInClient());
         setIsLoggedIn(liff.isLoggedIn());
 
         if (liff.isLoggedIn()) {
-          const userProfile = await liff.getProfile();
-          setProfile(userProfile);
+          const nextProfile = await liff.getProfile();
+          if (!isMounted) return;
+          setProfile({
+            userId: nextProfile.userId,
+            displayName: nextProfile.displayName,
+            pictureUrl: nextProfile.pictureUrl,
+            statusMessage: nextProfile.statusMessage
+          });
         }
 
-        setIsLoading(false);
-      } catch (err) {
-        console.error('[LIFF] Init failed:', err);
-        setError(err instanceof Error ? err.message : 'LIFF initialization failed');
-        setIsLoading(false);
+        setError(null);
+      } catch (nextError) {
+        if (!isMounted) return;
+        setError(nextError instanceof Error ? nextError.message : '\u0e40\u0e1b\u0e34\u0e14 LINE Mini App \u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08');
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
-    };
+    }
 
-    loadLiff();
-  }, [liffId]);
+    void bootstrap();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isMockMode, liffId]);
 
   const login = useCallback(() => {
-    if (!liffId || !isLineEnvironment()) {
-      // Mock login
+    if (isMockMode) {
       setProfile(MOCK_PROFILE);
       setIsLoggedIn(true);
+      setIsReady(true);
+      setError(null);
       return;
     }
 
-    // @ts-ignore
-    window.liff?.login();
-  }, [liffId]);
+    if (!liffId) {
+      setError('\u0e22\u0e31\u0e07\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49\u0e15\u0e31\u0e49\u0e07\u0e04\u0e48\u0e32 LIFF ID \u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a LINE Mini App');
+      return;
+    }
+
+    liff.login({ redirectUri: getRedirectUri() });
+  }, [isMockMode, liffId]);
 
   const logout = useCallback(() => {
-    // @ts-ignore
-    window.liff?.logout();
-    setProfile(null);
-    setIsLoggedIn(false);
-  }, []);
+    if (isMockMode) {
+      setProfile(null);
+      setIsLoggedIn(false);
+      setIsReady(false);
+      return;
+    }
+
+    liff.logout();
+    window.location.reload();
+  }, [isMockMode]);
 
   const closeWindow = useCallback(() => {
-    // @ts-ignore
-    window.liff?.closeWindow();
-  }, []);
+    if (!isMockMode && liff.isInClient()) {
+      liff.closeWindow();
+    }
+  }, [isMockMode]);
 
   return {
+    isReady,
     isLoggedIn,
+    isInClient,
+    isMockMode,
     profile,
     userId: profile?.userId ?? null,
     isLoading,
