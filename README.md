@@ -13,15 +13,17 @@
 
 ค่า port หลักที่ใช้ตอนนี้:
 
-- `8080`: backend API
-- `5173`: Patient App ผ่าน Docker
-- `5174`: Doctor App ผ่าน Docker
-- `5175`: Admin App ผ่าน Docker
+- `8081`: backend API
+- `5183`: Patient App ผ่าน Docker
+- `5184`: Doctor App ผ่าน Docker
+- `5185`: Admin App ผ่าน Docker
 - `5432`: PostgreSQL
 
 ถ้าจะรันแบบ dev server เพิ่มเอง:
 
-- `5185`: Patient App แบบ Vite dev server ที่เคยใช้ทดสอบ
+- `5173`: Patient App แบบ Vite dev server
+- `5174`: Doctor App แบบ Vite dev server
+- `5175`: Admin App แบบ Vite dev server
 
 ## Quick Start
 
@@ -34,10 +36,10 @@ docker compose up -d --build node-api patient-ui doctor-ui admin-ui postgres
 
 เปิดใช้งานได้ที่:
 
-- Patient: `http://localhost:5173`
-- Doctor: `http://localhost:5174`
-- Admin: `http://localhost:5175`
-- API: `http://localhost:8080`
+- Patient: `http://localhost:5183`
+- Doctor: `http://localhost:5184`
+- Admin: `http://localhost:5185`
+- API: `http://localhost:8081`
 
 ## LINE Mini App
 
@@ -98,16 +100,16 @@ npm run dev:admin
 
 - อย่ารัน Vite dev server ซ้อนกับพอร์ต Docker เดียวกันโดยไม่ตั้ง port ใหม่
 - ถ้าจะใช้ Docker UI เป็นหลัก ให้ปิด dev server ที่ค้างอยู่ก่อน
-- ถ้าจะใช้ `frontend-patient` แบบ dev server แนะนำให้ใช้ `5185` แทน `5173`
+- ค่า dev server ปัจจุบันคือ `5173/5174/5175` และ Docker UI ใช้ `5183/5184/5185`
 
 ## Avoid Port Collisions
 
-ปัญหาที่เจอบ่อยคือมี `vite` ค้างอยู่ในเครื่อง แล้วแย่ง `localhost:5173` หรือ `localhost:5174` ทำให้ browser เปิดหน้าเก่าแทน Docker app
+ปัญหาที่เจอบ่อยคือมี `vite` ค้างอยู่ในเครื่อง แล้วสลับกันใช้งานกับ Docker UI จนเปิดผิดตัวโดยไม่รู้ตัว
 
 เช็กว่า port ไหนถูกใช้งานอยู่:
 
 ```powershell
-Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -in 5173,5174,5175,5185 } |
+Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -in 5173,5174,5175,5183,5184,5185 } |
   Select-Object LocalAddress,LocalPort,OwningProcess | Sort-Object LocalPort
 ```
 
@@ -130,10 +132,10 @@ Stop-Process -Id <PID> -Force
 - Docker UI จะเสิร์ฟไฟล์ `/assets/...js`
 - Vite dev server จะมี `/@vite/client`
 
-ตัวอย่างตรวจหน้า `5173`:
+ตัวอย่างตรวจหน้า `5183`:
 
 ```powershell
-Invoke-WebRequest -Uri http://localhost:5173 -UseBasicParsing |
+Invoke-WebRequest -Uri http://localhost:5183 -UseBasicParsing |
   Select-Object -ExpandProperty Content
 ```
 
@@ -171,8 +173,8 @@ npm run test:e2e
 ถ้าต้องการชี้ไปที่ URL อื่น:
 
 ```powershell
-$env:PATIENT_APP_URL='http://localhost:5173'
-$env:DOCTOR_APP_URL='http://localhost:5174'
+$env:PATIENT_APP_URL='http://localhost:5183'
+$env:DOCTOR_APP_URL='http://localhost:5184'
 npm run test:e2e
 ```
 
@@ -197,7 +199,7 @@ npm run test:e2e
 ## Current Notes
 
 - stack ปัจจุบันใช้ `node-api` ตัวเดียวเป็น backend หลัก
-- ถ้าใช้ Docker เป็นหลัก แนะนำให้เปิดผ่าน `5173/5174/5175`
+- ถ้าใช้ Docker เป็นหลัก แนะนำให้เปิดผ่าน `5183/5184/5185`
 - ถ้าใช้ dev server ควบคู่กัน ให้แยก port ชัดเจนเพื่อไม่ให้ browser ไปเจอหน้าเก่า
 - ถ้าต้องการเปลี่ยนรหัสผ่านหมอถาวร ควรทำผ่านฐานข้อมูลหรือหน้า admin ในรอบถัดไป
 
