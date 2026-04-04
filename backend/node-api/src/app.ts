@@ -7,6 +7,7 @@ import {
   createConsultation as createConsultationDb,
   createPatientProfile as createPatientProfileDb,
   getConsultationById as getConsultationByIdDb,
+  getDoctorById as getDoctorByIdDb,
   getDoctorQueue as getDoctorQueueDb,
   getRoutingCoverage as getRoutingCoverageDb,
   getSlaSnapshot as getSlaSnapshotDb,
@@ -21,6 +22,7 @@ import {
   createConsultation as createConsultationMock,
   createPatientProfile as createPatientProfileMock,
   getConsultationById as getConsultationByIdMock,
+  getDoctorById as getDoctorByIdMock,
   getDoctorQueue as getDoctorQueueMock,
   getRoutingCoverage as getRoutingCoverageMock,
   getSlaSnapshot as getSlaSnapshotMock,
@@ -40,6 +42,7 @@ const createPatientProfile = USE_DATABASE ? createPatientProfileDb : createPatie
 const createConsultation = USE_DATABASE ? createConsultationDb : createConsultationMock;
 const listConsultations = USE_DATABASE ? listConsultationsDb : listConsultationsMock;
 const getConsultationById = USE_DATABASE ? getConsultationByIdDb : getConsultationByIdMock;
+const getDoctorById = USE_DATABASE ? getDoctorByIdDb : getDoctorByIdMock;
 const getDoctorQueue = USE_DATABASE ? getDoctorQueueDb : getDoctorQueueMock;
 const claimConsultation = USE_DATABASE ? claimConsultationDb : claimConsultationMock;
 const respondToConsultation = USE_DATABASE ? respondToConsultationDb : respondToConsultationMock;
@@ -300,9 +303,14 @@ export function createApp() {
   });
 
   app.get("/api/v1/doctor/queue", requireDoctor, async (request, response) => {
-    const provinceCodes = [request.user?.provinceCode].filter((value): value is string => Boolean(value));
-
     try {
+      const doctor = await getDoctorById(request.user!.sub);
+      const provinceCodes = doctor?.provinceCodes?.filter(Boolean) ?? [];
+
+      if (provinceCodes.length === 0) {
+        return response.json([]);
+      }
+
       const queue = await getDoctorQueue(provinceCodes);
       response.json(queue);
     } catch (error) {
