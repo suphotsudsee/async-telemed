@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-telemed}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - coolify_postgres_data:/var/lib/postgresql/data
+      - coolify_postgres_data_v2:/var/lib/postgresql/data
       - ./database/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-telemed} -d ${POSTGRES_DB:-telemed}"]
@@ -19,7 +19,7 @@ services:
       context: .
       dockerfile: docker/node-api.prod.Dockerfile
     environment:
-      PORT: 8080
+      PORT: 8081
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-telemed}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-telemed}
       JWT_SECRET: ${JWT_SECRET}
@@ -40,12 +40,12 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
     ports:
-      - "${API_PORT:-8080}:8080"
+      - "${API_PORT:-8081}:8081"
 
   patient-ui:
     build:
@@ -60,7 +60,7 @@ services:
       node-api:
         condition: service_healthy
     ports:
-      - "${PATIENT_PORT:-5173}:80"
+      - "${PATIENT_PORT:-5183}:80"
 
   doctor-ui:
     build:
@@ -72,7 +72,7 @@ services:
       node-api:
         condition: service_healthy
     ports:
-      - "${DOCTOR_PORT:-5174}:80"
+      - "${DOCTOR_PORT:-5184}:80"
 
   admin-ui:
     build:
@@ -84,7 +84,7 @@ services:
       node-api:
         condition: service_healthy
     ports:
-      - "${ADMIN_PORT:-5175}:80"
+      - "${ADMIN_PORT:-5185}:80"
 
 volumes:
-  coolify_postgres_data:
+  coolify_postgres_data_v2:
