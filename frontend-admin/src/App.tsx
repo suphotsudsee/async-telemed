@@ -40,6 +40,13 @@ const TEXT = {
   escalated: 'ส่งต่อ',
   lastEscalatedAt: 'ส่งต่อล่าสุด',
   escalationEmpty: 'ยังไม่มีเคสส่งต่อในระบบ',
+  escalationDetails: 'รายละเอียดเคสส่งต่อ',
+  escalationCases: 'รายการเคสที่ถูกส่งต่อในจังหวัดนี้',
+  consultationId: 'เลขเคส',
+  status: 'สถานะ',
+  detail: 'รายละเอียด',
+  showDetails: 'ดูรายละเอียด',
+  hideDetails: 'ซ่อนรายละเอียด',
   watchTitle: '\u0e08\u0e38\u0e14\u0e17\u0e35\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e08\u0e31\u0e1a\u0e15\u0e32',
   watchEmpty: '\u0e22\u0e31\u0e07\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e04\u0e27\u0e32\u0e21\u0e40\u0e2a\u0e35\u0e48\u0e22\u0e07\u0e23\u0e38\u0e19\u0e41\u0e23\u0e07\u0e43\u0e19\u0e23\u0e2d\u0e1a\u0e19\u0e35\u0e49',
   generatedAt: '\u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15\u0e25\u0e48\u0e32\u0e2a\u0e38\u0e14',
@@ -111,6 +118,10 @@ type EscalationRow = {
   lastEscalatedAt?: string;
 };
 
+type EscalatedConsultation = Consultation & {
+  chiefComplaint?: string;
+};
+
 function readSession(): AdminSession | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
@@ -174,6 +185,7 @@ export default function App() {
   const [routingItems, setRoutingItems] = useState<RoutingItem[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [savingDoctorId, setSavingDoctorId] = useState<string | null>(null);
+  const [selectedEscalationProvince, setSelectedEscalationProvince] = useState<string | null>(null);
 
   async function loadDashboard(activeSession = session) {
     if (!activeSession) {
@@ -377,6 +389,16 @@ export default function App() {
     );
   }, [consultations]);
 
+  const escalatedConsultations = useMemo<EscalatedConsultation[]>(() => {
+    if (!selectedEscalationProvince) {
+      return [];
+    }
+
+    return consultations
+      .filter((item) => item.status === 'escalated' && item.provinceCode === selectedEscalationProvince)
+      .sort((a, b) => new Date(b.respondedAt ?? 0).getTime() - new Date(a.respondedAt ?? 0).getTime());
+  }, [consultations, selectedEscalationProvince]);
+
   if (!session) {
     return (
       <main className="min-h-screen px-4 py-6 text-slate-900">
@@ -538,6 +560,7 @@ export default function App() {
                         <th className="px-4 py-3">{TEXT.escalated}</th>
                         <th className="px-4 py-3">{TEXT.doctors}</th>
                         <th className="px-4 py-3">{TEXT.lastEscalatedAt}</th>
+                        <th className="px-4 py-3">{TEXT.detail}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -549,6 +572,15 @@ export default function App() {
                           </td>
                           <td className="px-4 py-4">{routingItems.find((item) => item.provinceCode === row.provinceCode)?.doctorCount ?? 0}</td>
                           <td className="px-4 py-4">{formatThaiDate(row.lastEscalatedAt)}</td>
+                          <td className="px-4 py-4">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedEscalationProvince((current) => current === row.provinceCode ? null : row.provinceCode)}
+                              className="rounded-2xl border border-violet-200 px-3 py-2 text-sm font-semibold text-violet-700 transition hover:bg-violet-50"
+                            >
+                              {selectedEscalationProvince === row.provinceCode ? TEXT.hideDetails : TEXT.showDetails}
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -557,6 +589,41 @@ export default function App() {
               ) : (
                 <div className="mt-5 rounded-[1.5rem] border border-slate-100 bg-slate-50 px-4 py-6 text-sm text-slate-500">
                   {TEXT.escalationEmpty}
+                </div>
+              )}
+
+              {selectedEscalationProvince && (
+                <div className="mt-5 rounded-[1.5rem] border border-violet-100 bg-violet-50/60 p-5">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-violet-500">{TEXT.escalationDetails}</p>
+                      <h3 className="text-xl font-bold text-ops-navy">
+                        {TEXT.province} {provinceLabel(selectedEscalationProvince)}
+                      </h3>
+                    </div>
+                    <div className="text-sm text-slate-500">{escalatedConsultations.length} {TEXT.escalationCases}</div>
+                  </div>
+
+                  <div className="mt-4 overflow-hidden rounded-[1.25rem] border border-violet-100 bg-white">
+                    <table className="min-w-full border-collapse text-left text-sm">
+                      <thead className="bg-violet-50 text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">{TEXT.consultationId}</th>
+                          <th className="px-4 py-3">{TEXT.status}</th>
+                          <th className="px-4 py-3">{TEXT.lastEscalatedAt}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {escalatedConsultations.map((item) => (
+                          <tr key={item.id} className="border-t border-violet-100">
+                            <td className="px-4 py-4 font-semibold text-ops-navy">{item.id}</td>
+                            <td className="px-4 py-4">{item.status}</td>
+                            <td className="px-4 py-4">{formatThaiDate(item.respondedAt)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </section>
