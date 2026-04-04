@@ -43,6 +43,7 @@ const TEXT = {
   escalationDetails: 'รายละเอียดเคสส่งต่อ',
   escalationCases: 'รายการเคสที่ถูกส่งต่อในจังหวัดนี้',
   consultationId: 'เลขเคส',
+  chiefComplaint: 'อาการหลัก',
   status: 'สถานะ',
   detail: 'รายละเอียด',
   showDetails: 'ดูรายละเอียด',
@@ -81,6 +82,7 @@ type Consultation = {
   id: string;
   provinceCode: string;
   status: string;
+  chiefComplaint?: string;
   firstResponseDueAt: string;
   completionDueAt: string;
   respondedAt?: string;
@@ -118,9 +120,7 @@ type EscalationRow = {
   lastEscalatedAt?: string;
 };
 
-type EscalatedConsultation = Consultation & {
-  chiefComplaint?: string;
-};
+type EscalatedConsultation = Consultation;
 
 function readSession(): AdminSession | null {
   try {
@@ -609,6 +609,7 @@ export default function App() {
                       <thead className="bg-violet-50 text-slate-500">
                         <tr>
                           <th className="px-4 py-3">{TEXT.consultationId}</th>
+                          <th className="px-4 py-3">{TEXT.chiefComplaint}</th>
                           <th className="px-4 py-3">{TEXT.status}</th>
                           <th className="px-4 py-3">{TEXT.lastEscalatedAt}</th>
                         </tr>
@@ -617,6 +618,7 @@ export default function App() {
                         {escalatedConsultations.map((item) => (
                           <tr key={item.id} className="border-t border-violet-100">
                             <td className="px-4 py-4 font-semibold text-ops-navy">{item.id}</td>
+                            <td className="px-4 py-4 text-slate-600">{item.chiefComplaint ?? '-'}</td>
                             <td className="px-4 py-4">{item.status}</td>
                             <td className="px-4 py-4">{formatThaiDate(item.respondedAt)}</td>
                           </tr>
