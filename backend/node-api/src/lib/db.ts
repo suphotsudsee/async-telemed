@@ -398,25 +398,35 @@ export async function createPatientProfile(input: {
   provinceCode: string;
   encryptionKey: string;
 }): Promise<PatientProfile> {
+  const userId = uuidv4();
   const id = uuidv4();
   const thaiIdHash = sha256(input.thaiId);
   const encryptedFirstName = encryptField(input.firstName, input.encryptionKey);
   const encryptedLastName = encryptField(input.lastName, input.encryptionKey);
   const encryptedPhone = encryptField(input.phone, input.encryptionKey);
 
+  await pool.query(
+    `INSERT INTO app_users (id, role, display_name)
+     VALUES ($1, 'patient', $2)`,
+    [userId, `${input.firstName} ${input.lastName}`.trim()]
+  );
+
   await pool.query<{
     id: string;
     thai_id_hash: string;
-    encrypted_first_name: string;
-    encrypted_last_name: string;
-    encrypted_phone: string;
+    first_name_encrypted: string;
+    last_name_encrypted: string;
+    phone_encrypted: string;
     line_user_id: string;
     province_code: string;
   }>(
-    `INSERT INTO patients (id, thai_id_hash, encrypted_first_name, encrypted_last_name, encrypted_phone, line_user_id, province_code)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING id, thai_id_hash, encrypted_first_name, encrypted_last_name, encrypted_phone, line_user_id, province_code`,
-    [id, thaiIdHash, encryptedFirstName, encryptedLastName, encryptedPhone, input.lineUserId, input.provinceCode]
+    `INSERT INTO patient_profiles (
+       id, user_id, thai_id_hash, first_name_encrypted, last_name_encrypted,
+       phone_encrypted, line_user_id, province_code
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id, thai_id_hash, first_name_encrypted, last_name_encrypted, phone_encrypted, line_user_id, province_code`,
+    [id, userId, thaiIdHash, encryptedFirstName, encryptedLastName, encryptedPhone, input.lineUserId, input.provinceCode]
   );
 
   return {
@@ -435,12 +445,12 @@ export async function findPatientByThaiId(thaiId: string): Promise<PatientProfil
   const result = await pool.query<{
     id: string;
     thai_id_hash: string;
-    encrypted_first_name: string;
-    encrypted_last_name: string;
-    encrypted_phone: string;
+    first_name_encrypted: string;
+    last_name_encrypted: string;
+    phone_encrypted: string;
     line_user_id: string;
     province_code: string;
-  }>("SELECT * FROM patients WHERE thai_id_hash = $1", [thaiIdHash]);
+  }>("SELECT * FROM patient_profiles WHERE thai_id_hash = $1", [thaiIdHash]);
 
   if (result.rows.length === 0) return null;
 
@@ -448,9 +458,9 @@ export async function findPatientByThaiId(thaiId: string): Promise<PatientProfil
   return {
     id: row.id,
     thaiIdHash: row.thai_id_hash,
-    encryptedFirstName: row.encrypted_first_name,
-    encryptedLastName: row.encrypted_last_name,
-    encryptedPhone: row.encrypted_phone,
+    encryptedFirstName: row.first_name_encrypted,
+    encryptedLastName: row.last_name_encrypted,
+    encryptedPhone: row.phone_encrypted,
     lineUserId: row.line_user_id,
     provinceCode: row.province_code
   };
@@ -472,18 +482,34 @@ export async function createConsultation(input: {
 
   let patientId = input.patientId;
   if (!isValidUuid(input.patientId)) {
-    const userId = uuidv4();
-    await pool.query(
-      `INSERT INTO app_users (id, role, display_name) VALUES ($1, 'patient', 'Mock Patient')`,
-      [userId]
+    const existingPatient = await pool.query<{ id: string }>(
+      `SELECT id
+       FROM patient_profiles
+       WHERE line_user_id = ANY($1)
+       LIMIT 1`,
+      [[input.patientId, `line-${input.patientId}`]]
     );
 
-    patientId = uuidv4();
-    await pool.query(
-      `INSERT INTO patient_profiles (id, user_id, thai_id_hash, first_name_encrypted, last_name_encrypted, phone_encrypted, line_user_id, province_code)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [patientId, userId, sha256(`mock-${patientId}`), "Mock", "Patient", "00000000000", `line-${patientId}`, input.provinceCode]
-    );
+    if (existingPatient.rows.length > 0) {
+      patientId = existingPatient.rows[0].id;
+    } else {
+      const userId = uuidv4();
+      patientId = uuidv4();
+
+      await pool.query(
+        `INSERT INTO app_users (id, role, display_name) VALUES ($1, 'patient', 'LINE Patient')`,
+        [userId]
+      );
+
+      await pool.query(
+        `INSERT INTO patient_profiles (
+           id, user_id, thai_id_hash, first_name_encrypted, last_name_encrypted,
+           phone_encrypted, line_user_id, province_code
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [patientId, userId, sha256(`mock-${input.patientId}`), "LINE", "Patient", "00000000000", input.patientId, input.provinceCode]
+      );
+    }
   }
 
   await pool.query(
