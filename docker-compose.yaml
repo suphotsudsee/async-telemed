@@ -1,13 +1,14 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    build:
+      context: .
+      dockerfile: docker/postgres.Dockerfile
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-telemed}
       POSTGRES_USER: ${POSTGRES_USER:-telemed}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - coolify_postgres_data_v2:/var/lib/postgresql/data
-      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+      - coolify_postgres_data_v3:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-telemed} -d ${POSTGRES_DB:-telemed}"]
       interval: 10s
@@ -87,4 +88,4 @@ services:
       - "${ADMIN_PORT:-5185}:80"
 
 volumes:
-  coolify_postgres_data_v2:
+  coolify_postgres_data_v3:

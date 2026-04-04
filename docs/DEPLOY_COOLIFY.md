@@ -28,6 +28,7 @@
 3. ใน Coolify สร้าง resource แบบ `Docker Compose`
 4. เลือก compose file เป็น `docker/docker-compose.coolify.yml`
 5. ตั้ง environment variables ตามตัวอย่างใน `docker/.env.coolify.example`
+6. deploy ใหม่โดยให้ Coolify reload compose file ล่าสุดจาก GitHub
 
 ## Environment Variables ที่ต้องตั้งใน Coolify
 
@@ -60,11 +61,12 @@
 - `patient.coolify.phoubon.in.th` -> `patient-ui:80`
 - `doctor.coolify.phoubon.in.th` -> `doctor-ui:80`
 - `admin.coolify.phoubon.in.th` -> `admin-ui:80`
-- `api.coolify.phoubon.in.th` -> `node-api:8080`
+- `api.coolify.phoubon.in.th` -> `node-api:8081`
 
 ## สิ่งที่ผมแก้เพิ่มเพื่อรองรับ production
 
 - เพิ่ม `node-api` production Dockerfile ที่ build เป็น `dist` แล้วรัน `npm run start`
+- เพิ่ม `postgres` Dockerfile ที่ copy migrations เข้า image โดยตรง
 - เพิ่ม compose file สำหรับ Coolify โดยไม่ใช้ bind mount แบบ dev
 - เปลี่ยน backend ให้ใช้ `CORS_ORIGINS` จาก environment จริง
 - แยก env example สำหรับ Coolify โดยเฉพาะ
@@ -73,4 +75,5 @@
 
 - Compose file เดิม `docker/docker-compose.yml` ยังใช้สำหรับ local/dev
 - สำหรับ production บน Coolify ให้ใช้ `docker/docker-compose.coolify.yml`
+- ถ้า environment เคยสร้าง Postgres volume แบบ schema ว่างไว้แล้ว รอบนี้ใช้ volume `coolify_postgres_data_v3` เพื่อให้ init scripts รันกับ data directory ใหม่
 - ถ้าจะเก็บรูปจริง ควรเปลี่ยน `STORAGE_PROVIDER` จาก `local` ไปเป็น `s3` หรือ object storage ที่เข้าถึงได้ถาวร
