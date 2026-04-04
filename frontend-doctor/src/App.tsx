@@ -2,6 +2,7 @@
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
 const SESSION_KEY = 'doctor_session';
+const QUEUE_REFRESH_INTERVAL_MS = 10000;
 
 const TEXT = {
   loading: '\u0e01\u0e33\u0e25\u0e31\u0e07\u0e42\u0e2b\u0e25\u0e14\u0e04\u0e34\u0e27\u0e07\u0e32\u0e19...',
@@ -209,6 +210,31 @@ export default function App() {
     setQueue([]);
     setSelectedId(null);
     setIsLoading(false);
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const refreshQueue = () => {
+      void loadQueue(session);
+    };
+
+    const intervalId = window.setInterval(refreshQueue, QUEUE_REFRESH_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshQueue();
+      }
+    };
+
+    window.addEventListener('focus', refreshQueue);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshQueue);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [session]);
 
   const selected = useMemo(
