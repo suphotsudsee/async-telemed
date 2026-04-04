@@ -3,6 +3,17 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
 const SESSION_KEY = 'admin_session';
 
+const PROVINCES = [
+  { code: '10', name: 'กรุงเทพมหานคร' },
+  { code: '11', name: 'สมุทรปราการ' },
+  { code: '12', name: 'นนทบุรี' },
+  { code: '13', name: 'ปทุมธานี' },
+  { code: '50', name: 'เชียงใหม่' },
+  { code: '51', name: 'ลำพูน' },
+  { code: '52', name: 'ลำปาง' },
+  { code: '83', name: 'ภูเก็ต' }
+] as const;
+
 const TEXT = {
   appTitle: '\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21\u0e07\u0e32\u0e19',
   appSubtitle: '\u0e14\u0e39\u0e20\u0e32\u0e1e\u0e23\u0e27\u0e21 SLA, \u0e20\u0e32\u0e23\u0e30\u0e04\u0e34\u0e27, \u0e41\u0e25\u0e30\u0e04\u0e27\u0e32\u0e21\u0e04\u0e23\u0e2d\u0e1a\u0e04\u0e25\u0e38\u0e21\u0e02\u0e2d\u0e07\u0e41\u0e1e\u0e17\u0e22\u0e4c\u0e41\u0e1a\u0e1a real-time',
@@ -32,7 +43,16 @@ const TEXT = {
   doctors: '\u0e08\u0e33\u0e19\u0e27\u0e19\u0e41\u0e1e\u0e17\u0e22\u0e4c',
   closedRate: '\u0e2d\u0e31\u0e15\u0e23\u0e32\u0e1b\u0e34\u0e14\u0e07\u0e32\u0e19',
   mins: '\u0e19\u0e32\u0e17\u0e35',
-  demoHint: 'admin / admin123'
+  demoHint: 'admin / admin123',
+  dashboardTab: 'Dashboard',
+  settingsTab: 'Settings',
+  doctorSettingsTitle: 'ตั้งค่าจังหวัดที่แพทย์รับเคส',
+  doctorSettingsHint: 'กำหนด coverage ของแพทย์แต่ละคนเพื่อให้คิวจากจังหวัดนั้นส่งเข้า Doctor App ได้',
+  coveredProvinces: 'จังหวัดที่รับเคส',
+  saveCoverage: 'บันทึกการตั้งค่า',
+  saving: 'กำลังบันทึก...',
+  saveCoverageOk: 'บันทึกการตั้งค่าแพทย์แล้ว',
+  saveCoverageFail: 'บันทึกการตั้งค่าแพทย์ไม่สำเร็จ'
 } as const;
 
 type AdminSession = {
@@ -61,6 +81,13 @@ type SlaItem = {
 type RoutingItem = {
   provinceCode: string;
   doctorCount: number;
+};
+
+type Doctor = {
+  id: string;
+  displayName: string;
+  provinceCodes: string[];
+  specialty: 'dermatology';
 };
 
 type ProvinceRow = {
@@ -103,6 +130,10 @@ function formatMinutes(value: number) {
   return `${Math.round(value)} ${TEXT.mins}`;
 }
 
+function provinceLabel(provinceCode: string) {
+  return PROVINCES.find((item) => item.code === provinceCode)?.name ?? provinceCode;
+}
+
 function isOpenStatus(status: string) {
   return ['submitted', 'triaged', 'in_review', 'awaiting_patient'].includes(status);
 }
@@ -117,15 +148,19 @@ function isCompletionRisk(item: Consultation) {
 
 export default function App() {
   const [session, setSession] = useState<AdminSession | null>(() => readSession());
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'settings'>('dashboard');
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('admin123');
   const [loading, setLoading] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string>('');
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [slaItems, setSlaItems] = useState<SlaItem[]>([]);
   const [routingItems, setRoutingItems] = useState<RoutingItem[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [savingDoctorId, setSavingDoctorId] = useState<string | null>(null);
 
   async function loadDashboard(activeSession = session) {
     if (!activeSession) {
@@ -153,9 +188,16 @@ export default function App() {
       if (!routingResponse.ok) throw new Error('routing');
       const routingPayload = (await routingResponse.json()) as RoutingItem[];
 
+      const doctorsResponse = await fetch(`${API_BASE}/api/v1/admin/doctors`, {
+        headers: { Authorization: `Bearer ${activeSession.token}` }
+      });
+      if (!doctorsResponse.ok) throw new Error('doctors');
+      const doctorsPayload = (await doctorsResponse.json()) as Doctor[];
+
       setConsultations(Array.isArray(consultationsPayload) ? consultationsPayload : []);
       setSlaItems(Array.isArray(slaPayload?.items) ? slaPayload.items : []);
       setRoutingItems(Array.isArray(routingPayload) ? routingPayload : []);
+      setDoctors(Array.isArray(doctorsPayload) ? doctorsPayload : []);
       setGeneratedAt(String(slaPayload?.generatedAt ?? new Date().toISOString()));
     } catch {
       setError(TEXT.apiError);
@@ -201,11 +243,62 @@ export default function App() {
 
   function signOut() {
     setSession(null);
+    setActiveTab('dashboard');
     setConsultations([]);
     setSlaItems([]);
     setRoutingItems([]);
+    setDoctors([]);
     setGeneratedAt('');
     setError(null);
+    setNotice(null);
+  }
+
+  async function saveDoctorCoverage(doctorId: string, provinceCodes: string[]) {
+    if (!session) return;
+
+    setSavingDoctorId(doctorId);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/admin/doctors/${doctorId}/provinces`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`
+        },
+        body: JSON.stringify({ provinceCodes })
+      });
+
+      if (!response.ok) throw new Error('save doctor coverage');
+
+      const payload = (await response.json()) as Doctor;
+      let nextDoctors: Doctor[] = [];
+      setDoctors((current) => {
+        nextDoctors = current.map((item) => item.id === payload.id ? payload : item);
+        return nextDoctors;
+      });
+      setRoutingItems((current) => {
+        const next = new Map(current.map((item) => [item.provinceCode, item.doctorCount]));
+
+        for (const province of PROVINCES) {
+          const doctorsCovering = nextDoctors
+            .filter((item) => item.provinceCodes.includes(province.code))
+            .length;
+
+          if (doctorsCovering > 0 || next.has(province.code)) {
+            next.set(province.code, doctorsCovering);
+          }
+        }
+
+        return Array.from(next.entries()).map(([provinceCode, doctorCount]) => ({ provinceCode, doctorCount }));
+      });
+      setNotice(TEXT.saveCoverageOk);
+    } catch {
+      setError(TEXT.saveCoverageFail);
+    } finally {
+      setSavingDoctorId(null);
+    }
   }
 
   const summary = useMemo(() => {
@@ -282,6 +375,7 @@ export default function App() {
   return (
     <main className="min-h-screen px-4 py-6 text-slate-900">
       {error && <div className="bg-rose-700 px-4 py-2 text-center text-sm text-white">{error}</div>}
+      {notice && <div className="bg-emerald-700 px-4 py-2 text-center text-sm text-white">{notice}</div>}
       <div className="mx-auto max-w-7xl">
         <section className="rounded-[2.25rem] bg-ops-navy px-6 py-8 text-white shadow-2xl">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
@@ -304,9 +398,26 @@ export default function App() {
           </div>
         </section>
 
+        <section className="mt-6 flex gap-3">
+          <button
+            type="button"
+            onClick={() => setActiveTab('dashboard')}
+            className={`rounded-2xl px-5 py-3 text-sm font-semibold transition ${activeTab === 'dashboard' ? 'bg-ops-navy text-white' : 'bg-white text-ops-navy shadow-lg'}`}
+          >
+            {TEXT.dashboardTab}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('settings')}
+            className={`rounded-2xl px-5 py-3 text-sm font-semibold transition ${activeTab === 'settings' ? 'bg-ops-navy text-white' : 'bg-white text-ops-navy shadow-lg'}`}
+          >
+            {TEXT.settingsTab}
+          </button>
+        </section>
+
         {loading ? (
           <section className="mt-6 rounded-[2rem] bg-white p-10 text-center shadow-lg">{TEXT.loading}</section>
-        ) : (
+        ) : activeTab === 'dashboard' ? (
           <>
             <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               <MetricCard label={TEXT.openCases} value={String(summary.openCases)} tone="bg-white" />
@@ -372,6 +483,27 @@ export default function App() {
               </article>
             </section>
           </>
+        ) : (
+          <section className="mt-6 rounded-[2rem] bg-white p-6 shadow-lg">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-ops-cyan">{TEXT.settingsTab}</p>
+                <h2 className="text-2xl font-bold text-ops-navy">{TEXT.doctorSettingsTitle}</h2>
+              </div>
+              <div className="text-sm text-slate-500">{TEXT.doctorSettingsHint}</div>
+            </div>
+
+            <div className="mt-6 grid gap-4 xl:grid-cols-2">
+              {doctors.map((doctor) => (
+                <DoctorCoverageCard
+                  key={doctor.id}
+                  doctor={doctor}
+                  saving={savingDoctorId === doctor.id}
+                  onSave={saveDoctorCoverage}
+                />
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </main>
@@ -383,6 +515,77 @@ function MetricCard({ label, value, tone }: { label: string; value: string; tone
     <article className={`rounded-[1.75rem] ${tone} p-5 shadow-lg`}>
       <p className="text-sm text-slate-500">{label}</p>
       <p className="mt-3 text-4xl font-extrabold text-ops-navy">{value}</p>
+    </article>
+  );
+}
+
+function DoctorCoverageCard({
+  doctor,
+  saving,
+  onSave
+}: {
+  doctor: Doctor;
+  saving: boolean;
+  onSave: (doctorId: string, provinceCodes: string[]) => Promise<void>;
+}) {
+  const [selectedProvinceCodes, setSelectedProvinceCodes] = useState<string[]>(doctor.provinceCodes);
+
+  useEffect(() => {
+    setSelectedProvinceCodes(doctor.provinceCodes);
+  }, [doctor.id, doctor.provinceCodes]);
+
+  function toggleProvince(provinceCode: string) {
+    setSelectedProvinceCodes((current) =>
+      current.includes(provinceCode)
+        ? current.filter((item) => item !== provinceCode)
+        : [...current, provinceCode].sort()
+    );
+  }
+
+  return (
+    <article className="rounded-[1.5rem] border border-slate-100 bg-slate-50 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-bold text-ops-navy">{doctor.displayName}</h3>
+          <p className="mt-1 text-sm text-slate-500">{doctor.specialty}</p>
+          <p className="mt-3 text-sm text-slate-600">
+            {TEXT.coveredProvinces}: {selectedProvinceCodes.length > 0 ? selectedProvinceCodes.map(provinceLabel).join(', ') : '-'}
+          </p>
+        </div>
+        <div className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-ops-navy shadow-sm">
+          {selectedProvinceCodes.length} จังหวัด
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        {PROVINCES.map((province) => {
+          const checked = selectedProvinceCodes.includes(province.code);
+          return (
+            <label
+              key={province.code}
+              className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition ${checked ? 'border-ops-cyan bg-cyan-50 text-ops-navy' : 'border-white bg-white text-slate-600'}`}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => toggleProvince(province.code)}
+                className="h-4 w-4 rounded"
+              />
+              <span className="font-medium">{province.name}</span>
+              <span className="ml-auto text-xs text-slate-400">{province.code}</span>
+            </label>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => void onSave(doctor.id, selectedProvinceCodes)}
+        className="mt-5 rounded-2xl bg-ops-navy px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+      >
+        {saving ? TEXT.saving : TEXT.saveCoverage}
+      </button>
     </article>
   );
 }

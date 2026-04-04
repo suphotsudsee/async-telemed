@@ -86,6 +86,16 @@ export function listDoctors(): Doctor[] {
   return doctors.map((doctor) => ({ ...doctor }));
 }
 
+export function updateDoctorProvinceCoverage(doctorId: string, provinceCodes: string[]): Doctor | undefined {
+  const doctor = doctors.find((item) => item.id === doctorId);
+  if (!doctor) {
+    return undefined;
+  }
+
+  doctor.provinceCodes = [...provinceCodes];
+  return { ...doctor };
+}
+
 export function getDoctorById(doctorId: string): Doctor | undefined {
   return doctors.find((doctor) => doctor.id === doctorId);
 }

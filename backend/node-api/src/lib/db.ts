@@ -319,6 +319,48 @@ export async function listDoctors(): Promise<Doctor[]> {
   }));
 }
 
+export async function updateDoctorProvinceCoverage(doctorId: string, provinceCodes: string[]): Promise<Doctor | null> {
+  await ensureDoctorAuthReady();
+
+  if (!isValidUuid(doctorId)) {
+    return null;
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const doctorExists = await client.query<{ id: string }>(
+      "SELECT id FROM doctors WHERE id = $1 AND active = TRUE",
+      [doctorId]
+    );
+
+    if (doctorExists.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    await client.query("DELETE FROM doctor_province_coverage WHERE doctor_id = $1", [doctorId]);
+
+    for (const provinceCode of provinceCodes) {
+      await client.query(
+        "INSERT INTO doctor_province_coverage (doctor_id, province_code) VALUES ($1, $2)",
+        [doctorId, provinceCode]
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  return getDoctorById(doctorId);
+}
+
 export async function verifyAdminCredentials(input: {
   username: string;
   password: string;

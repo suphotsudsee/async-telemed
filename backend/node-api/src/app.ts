@@ -12,8 +12,10 @@ import {
   getRoutingCoverage as getRoutingCoverageDb,
   getSlaSnapshot as getSlaSnapshotDb,
   healthCheck as dbHealthCheck,
+  listDoctors as listDoctorsDb,
   listConsultations as listConsultationsDb,
   respondToConsultation as respondToConsultationDb,
+  updateDoctorProvinceCoverage as updateDoctorProvinceCoverageDb,
   verifyDoctorCredentials as verifyDoctorCredentialsDb,
   verifyAdminCredentials as verifyAdminCredentialsDb
 } from "./lib/db.js";
@@ -26,8 +28,10 @@ import {
   getDoctorQueue as getDoctorQueueMock,
   getRoutingCoverage as getRoutingCoverageMock,
   getSlaSnapshot as getSlaSnapshotMock,
+  listDoctors as listDoctorsMock,
   listConsultations as listConsultationsMock,
   respondToConsultation as respondToConsultationMock,
+  updateDoctorProvinceCoverage as updateDoctorProvinceCoverageMock,
   verifyDoctorCredentials as verifyDoctorCredentialsMock,
   verifyAdminCredentials as verifyAdminCredentialsMock
 } from "./lib/domain.js";
@@ -40,6 +44,7 @@ const USE_DATABASE = process.env.DATABASE_URL && process.env.DATABASE_URL !== "m
 
 const createPatientProfile = USE_DATABASE ? createPatientProfileDb : createPatientProfileMock;
 const createConsultation = USE_DATABASE ? createConsultationDb : createConsultationMock;
+const listDoctors = USE_DATABASE ? listDoctorsDb : listDoctorsMock;
 const listConsultations = USE_DATABASE ? listConsultationsDb : listConsultationsMock;
 const getConsultationById = USE_DATABASE ? getConsultationByIdDb : getConsultationByIdMock;
 const getDoctorById = USE_DATABASE ? getDoctorByIdDb : getDoctorByIdMock;
@@ -48,6 +53,7 @@ const claimConsultation = USE_DATABASE ? claimConsultationDb : claimConsultation
 const respondToConsultation = USE_DATABASE ? respondToConsultationDb : respondToConsultationMock;
 const getRoutingCoverage = USE_DATABASE ? getRoutingCoverageDb : getRoutingCoverageMock;
 const getSlaSnapshot = USE_DATABASE ? getSlaSnapshotDb : getSlaSnapshotMock;
+const updateDoctorProvinceCoverage = USE_DATABASE ? updateDoctorProvinceCoverageDb : updateDoctorProvinceCoverageMock;
 const verifyDoctorCredentials = USE_DATABASE ? verifyDoctorCredentialsDb : verifyDoctorCredentialsMock;
 const verifyAdminCredentials = USE_DATABASE ? verifyAdminCredentialsDb : verifyAdminCredentialsMock;
 
@@ -83,6 +89,10 @@ const doctorLoginSchema = z.object({
 const adminLoginSchema = z.object({
   username: z.string().min(3),
   password: z.string().min(6)
+});
+
+const doctorCoverageSchema = z.object({
+  provinceCodes: z.array(z.string().length(2)).max(77)
 });
 
 const doctorResponseSchema = z.object({
@@ -400,6 +410,39 @@ export function createApp() {
     } catch (error) {
       console.error("Failed to get SLA snapshot:", error);
       response.status(500).json({ message: "Failed to get SLA data." });
+    }
+  });
+
+  app.get("/api/v1/admin/doctors", requireAdmin, async (_request, response) => {
+    try {
+      const doctors = await listDoctors();
+      response.json(doctors);
+    } catch (error) {
+      console.error("Failed to list doctors:", error);
+      response.status(500).json({ message: "Failed to load doctors." });
+    }
+  });
+
+  app.put("/api/v1/admin/doctors/:doctorId/provinces", requireAdmin, async (request, response) => {
+    const payload = doctorCoverageSchema.safeParse(request.body);
+    if (!payload.success) {
+      return response.status(400).json({ message: payload.error.flatten() });
+    }
+
+    try {
+      const doctor = await updateDoctorProvinceCoverage(
+        String(request.params.doctorId),
+        Array.from(new Set(payload.data.provinceCodes.map((item) => item.trim()).filter(Boolean))).sort()
+      );
+
+      if (!doctor) {
+        return response.status(404).json({ message: "Doctor not found." });
+      }
+
+      response.json(doctor);
+    } catch (error) {
+      console.error("Failed to update doctor coverage:", error);
+      response.status(500).json({ message: "Failed to update doctor coverage." });
     }
   });
 
