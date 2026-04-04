@@ -12,6 +12,8 @@ export interface ConsultationData {
   symptomDurationDays: number;
   redFlags: string[];
   imageUrls: string[];
+  latitude?: number;
+  longitude?: number;
 }
 
 const PROVINCES = [
@@ -135,10 +137,38 @@ export default function ConsultationForm({ patientId, onSubmit }: ConsultationFo
     updateForm({ imageUrls: formData.imageUrls.filter((_, i) => i !== index) });
   };
 
+  const getCurrentLocation = (): Promise<{ latitude: number; longitude: number } | null> => {
+    if (!navigator.geolocation) {
+      return Promise.resolve(null);
+    }
+
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+        },
+        () => resolve(null),
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 60000
+        }
+      );
+    });
+  };
+
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      await onSubmit(formData);
+      const location = await getCurrentLocation();
+      await onSubmit({
+        ...formData,
+        latitude: location?.latitude,
+        longitude: location?.longitude
+      });
     } finally {
       setLoading(false);
     }

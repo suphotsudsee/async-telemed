@@ -31,6 +31,9 @@ const TEXT = {
   duration: '\u0e23\u0e30\u0e22\u0e30\u0e40\u0e27\u0e25\u0e32',
   redFlags: '\u0e2d\u0e32\u0e01\u0e32\u0e23\u0e40\u0e15\u0e37\u0e2d\u0e19',
   submittedAt: '\u0e40\u0e27\u0e25\u0e32\u0e2a\u0e48\u0e07',
+  patientLocation: 'พิกัดผู้ป่วย',
+  locationUnavailable: 'ไม่มีพิกัดจากอุปกรณ์ผู้ป่วย',
+  openMap: 'เปิดแผนที่',
   images: '\u0e23\u0e39\u0e1b\u0e1b\u0e23\u0e30\u0e01\u0e2d\u0e1a',
   noImages: '\u0e44\u0e21\u0e48\u0e21\u0e35\u0e23\u0e39\u0e1b\u0e41\u0e19\u0e1a',
   diagnosis: '\u0e04\u0e33\u0e27\u0e34\u0e19\u0e34\u0e08\u0e09\u0e31\u0e22',
@@ -63,6 +66,8 @@ type QueueItem = {
   id: string;
   patientId: string;
   provinceCode: string;
+  latitude?: number;
+  longitude?: number;
   chiefComplaint: string;
   priorityScore: number;
   status: QueueStatus | string;
@@ -106,6 +111,10 @@ function formatThaiDate(value: string) {
     hour: '2-digit',
     minute: '2-digit'
   });
+}
+
+function formatCoordinate(value?: number) {
+  return typeof value === 'number' ? value.toFixed(6) : '-';
 }
 
 function emptyPrescription(): PrescriptionItem {
@@ -508,6 +517,43 @@ export default function App() {
                       <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
                         <div className="text-xs uppercase tracking-[0.2em] text-amber-200/80">{TEXT.redFlags}</div>
                         <div className="mt-2 leading-6">{selected.redFlags.join(', ')}</div>
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="rounded-[1.5rem] bg-white/5 p-5">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="text-lg font-medium">{TEXT.patientLocation}</div>
+                      {typeof selected.latitude === 'number' && typeof selected.longitude === 'number' && (
+                        <a
+                          href={`https://www.openstreetmap.org/?mlat=${selected.latitude}&mlon=${selected.longitude}#map=16/${selected.latitude}/${selected.longitude}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-2xl border border-white/10 px-3 py-2 text-sm text-white/80 transition hover:bg-white/5"
+                        >
+                          {TEXT.openMap}
+                        </a>
+                      )}
+                    </div>
+
+                    {typeof selected.latitude === 'number' && typeof selected.longitude === 'number' ? (
+                      <>
+                        <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                          <Metric label="Latitude" value={formatCoordinate(selected.latitude)} />
+                          <Metric label="Longitude" value={formatCoordinate(selected.longitude)} />
+                        </div>
+                        <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40">
+                          <iframe
+                            title={`consultation-map-${selected.id}`}
+                            src={`https://www.openstreetmap.org/export/embed.html?bbox=${selected.longitude - 0.01}%2C${selected.latitude - 0.01}%2C${selected.longitude + 0.01}%2C${selected.latitude + 0.01}&layer=mapnik&marker=${selected.latitude}%2C${selected.longitude}`}
+                            className="h-72 w-full border-0"
+                            loading="lazy"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-6 text-sm text-white/55">
+                        {TEXT.locationUnavailable}
                       </div>
                     )}
                   </section>

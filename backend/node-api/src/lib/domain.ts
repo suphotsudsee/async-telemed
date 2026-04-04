@@ -60,6 +60,8 @@ export function createConsultation(input: {
   symptomDurationDays: number;
   redFlags: string[];
   imageUrls: string[];
+  latitude?: number;
+  longitude?: number;
 }): Consultation {
   const submittedAt = new Date();
   const priorityScore = Math.min(100, 40 + input.redFlags.length * 20 + Math.max(0, 14 - input.symptomDurationDays));
@@ -67,6 +69,8 @@ export function createConsultation(input: {
     id: uuidv4(),
     patientId: input.patientId,
     provinceCode: input.provinceCode,
+    latitude: input.latitude,
+    longitude: input.longitude,
     specialty: "dermatology",
     status: "submitted",
     priorityScore,

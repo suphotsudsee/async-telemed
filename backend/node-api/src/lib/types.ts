@@ -36,6 +36,8 @@ export interface Consultation {
   id: string;
   patientId: string;
   provinceCode: string;
+  latitude?: number;
+  longitude?: number;
   specialty: "dermatology";
   status: ConsultationStatus;
   priorityScore: number;

@@ -78,7 +78,9 @@ const consultationSchema = z.object({
   chiefComplaint: z.string().min(10),
   symptomDurationDays: z.number().int().min(0),
   redFlags: z.array(z.string()).default([]),
-  imageUrls: z.array(z.string().url()).min(0).max(5).default([])
+  imageUrls: z.array(z.string().url()).min(0).max(5).default([]),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional()
 });
 
 const doctorLoginSchema = z.object({

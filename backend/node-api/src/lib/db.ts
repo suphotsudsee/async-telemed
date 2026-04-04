@@ -32,6 +32,7 @@ const DEFAULT_ADMIN_CREDENTIALS = {
 } as const;
 
 let doctorAuthReadyPromise: Promise<void> | null = null;
+let consultationLocationReadyPromise: Promise<void> | null = null;
 
 process.on("SIGINT", async () => {
   await pool.end();
@@ -124,6 +125,20 @@ async function ensureDoctorAuthReady(): Promise<void> {
   return doctorAuthReadyPromise;
 }
 
+async function ensureConsultationLocationReady(): Promise<void> {
+  if (!consultationLocationReadyPromise) {
+    consultationLocationReadyPromise = (async () => {
+      await pool.query("ALTER TABLE consultations ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION");
+      await pool.query("ALTER TABLE consultations ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION");
+    })().catch((error) => {
+      consultationLocationReadyPromise = null;
+      throw error;
+    });
+  }
+
+  return consultationLocationReadyPromise;
+}
+
 function parseRedFlags(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.filter((item): item is string => typeof item === "string");
@@ -207,6 +222,8 @@ async function buildConsultation(row: {
   id: string;
   patient_id: string;
   province_code: string;
+  latitude: number | null;
+  longitude: number | null;
   specialty: string;
   status: string;
   priority_score: number;
@@ -227,6 +244,8 @@ async function buildConsultation(row: {
     id: row.id,
     patientId: row.patient_id,
     provinceCode: row.province_code,
+    latitude: row.latitude ?? undefined,
+    longitude: row.longitude ?? undefined,
     specialty: row.specialty as "dermatology",
     status: row.status as Consultation["status"],
     priorityScore: row.priority_score,
@@ -515,7 +534,11 @@ export async function createConsultation(input: {
   symptomDurationDays: number;
   redFlags: string[];
   imageUrls: string[];
+  latitude?: number;
+  longitude?: number;
 }): Promise<Consultation> {
+  await ensureConsultationLocationReady();
+
   const id = uuidv4();
   const submittedAt = new Date();
   const priorityScore = Math.min(100, 40 + input.redFlags.length * 20 + Math.max(0, 14 - input.symptomDurationDays));
@@ -557,9 +580,9 @@ export async function createConsultation(input: {
   await pool.query(
     `INSERT INTO consultations (
       id, patient_id, province_code, specialty, status, priority_score,
-      chief_complaint, symptom_duration_days, red_flags,
+      chief_complaint, symptom_duration_days, red_flags, latitude, longitude,
       submitted_at, first_response_due_at, completion_due_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
     [
       id,
       patientId,
@@ -570,6 +593,8 @@ export async function createConsultation(input: {
       input.chiefComplaint,
       input.symptomDurationDays,
       JSON.stringify(input.redFlags),
+      input.latitude ?? null,
+      input.longitude ?? null,
       submittedAt.toISOString(),
       firstResponseDueAt.toISOString(),
       completionDueAt.toISOString()
@@ -588,6 +613,8 @@ export async function createConsultation(input: {
     id,
     patientId,
     provinceCode: input.provinceCode,
+    latitude: input.latitude,
+    longitude: input.longitude,
     specialty: "dermatology",
     status: "submitted",
     priorityScore,
@@ -602,10 +629,14 @@ export async function createConsultation(input: {
 }
 
 export async function listConsultations(): Promise<Consultation[]> {
+  await ensureConsultationLocationReady();
+
   const result = await pool.query<{
     id: string;
     patient_id: string;
     province_code: string;
+    latitude: number | null;
+    longitude: number | null;
     specialty: string;
     status: string;
     priority_score: number;
@@ -622,10 +653,14 @@ export async function listConsultations(): Promise<Consultation[]> {
 }
 
 export async function getConsultationById(id: string): Promise<Consultation | null> {
+  await ensureConsultationLocationReady();
+
   const result = await pool.query<{
     id: string;
     patient_id: string;
     province_code: string;
+    latitude: number | null;
+    longitude: number | null;
     specialty: string;
     status: string;
     priority_score: number;
@@ -644,10 +679,14 @@ export async function getConsultationById(id: string): Promise<Consultation | nu
 }
 
 export async function getDoctorQueue(provinceCodes: string[]): Promise<Consultation[]> {
+  await ensureConsultationLocationReady();
+
   const result = await pool.query<{
     id: string;
     patient_id: string;
     province_code: string;
+    latitude: number | null;
+    longitude: number | null;
     specialty: string;
     status: string;
     priority_score: number;
@@ -678,6 +717,8 @@ export async function claimConsultation(input: {
     id: string;
     patient_id: string;
     province_code: string;
+    latitude: number | null;
+    longitude: number | null;
     specialty: string;
     status: string;
     priority_score: number;
