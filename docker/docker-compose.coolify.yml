@@ -60,7 +60,7 @@ services:
       node-api:
         condition: service_healthy
     ports:
-      - "${PATIENT_PORT:-5173}:80"
+      - "${PATIENT_PORT:-5183}:80"
 
   doctor-ui:
     build:
@@ -72,7 +72,7 @@ services:
       node-api:
         condition: service_healthy
     ports:
-      - "${DOCTOR_PORT:-5174}:80"
+      - "${DOCTOR_PORT:-5184}:80"
 
   admin-ui:
     build:
@@ -84,7 +84,7 @@ services:
       node-api:
         condition: service_healthy
     ports:
-      - "${ADMIN_PORT:-5175}:80"
+      - "${ADMIN_PORT:-5185}:80"
 
 volumes:
   coolify_postgres_data:
