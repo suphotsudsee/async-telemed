@@ -30,10 +30,16 @@ const TEXT = {
   openCases: '\u0e04\u0e34\u0e27\u0e17\u0e35\u0e48\u0e22\u0e31\u0e07\u0e40\u0e1b\u0e34\u0e14\u0e2d\u0e22\u0e39\u0e48',
   firstBreaches: '\u0e40\u0e04\u0e2a\u0e40\u0e2a\u0e35\u0e48\u0e22\u0e07 SLA \u0e41\u0e23\u0e01',
   completionBreaches: '\u0e40\u0e04\u0e2a\u0e40\u0e01\u0e34\u0e19 SLA \u0e1b\u0e34\u0e14\u0e07\u0e32\u0e19',
+  escalatedCases: 'เคสที่ส่งต่อ',
   activeProvinces: '\u0e08\u0e31\u0e07\u0e2b\u0e27\u0e31\u0e14\u0e17\u0e35\u0e48\u0e21\u0e35\u0e04\u0e34\u0e27',
   avgWait: '\u0e40\u0e27\u0e25\u0e32\u0e23\u0e2d\u0e40\u0e09\u0e25\u0e35\u0e48\u0e22',
   provinceTable: '\u0e20\u0e32\u0e1e\u0e23\u0e27\u0e21\u0e15\u0e32\u0e21\u0e08\u0e31\u0e07\u0e2b\u0e27\u0e31\u0e14',
   provinceHint: '\u0e14\u0e39\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e34\u0e27\u0e17\u0e35\u0e48\u0e22\u0e31\u0e07\u0e04\u0e49\u0e32\u0e07, \u0e40\u0e04\u0e2a\u0e17\u0e35\u0e48\u0e40\u0e2a\u0e35\u0e48\u0e22\u0e07\u0e2b\u0e23\u0e37\u0e2d\u0e40\u0e01\u0e34\u0e19 SLA \u0e41\u0e25\u0e30\u0e08\u0e33\u0e19\u0e27\u0e19\u0e41\u0e1e\u0e17\u0e22\u0e4c\u0e04\u0e23\u0e2d\u0e1a\u0e04\u0e25\u0e38\u0e21',
+  escalationTable: 'รายงานการส่งต่อ',
+  escalationHint: 'สรุปจำนวนเคสที่แพทย์ส่งต่อ แยกตามจังหวัดเพื่อใช้ดูภาระเคสซับซ้อน',
+  escalated: 'ส่งต่อ',
+  lastEscalatedAt: 'ส่งต่อล่าสุด',
+  escalationEmpty: 'ยังไม่มีเคสส่งต่อในระบบ',
   watchTitle: '\u0e08\u0e38\u0e14\u0e17\u0e35\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e08\u0e31\u0e1a\u0e15\u0e32',
   watchEmpty: '\u0e22\u0e31\u0e07\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e04\u0e27\u0e32\u0e21\u0e40\u0e2a\u0e35\u0e48\u0e22\u0e07\u0e23\u0e38\u0e19\u0e41\u0e23\u0e07\u0e43\u0e19\u0e23\u0e2d\u0e1a\u0e19\u0e35\u0e49',
   generatedAt: '\u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15\u0e25\u0e48\u0e32\u0e2a\u0e38\u0e14',
@@ -70,6 +76,7 @@ type Consultation = {
   status: string;
   firstResponseDueAt: string;
   completionDueAt: string;
+  respondedAt?: string;
 };
 
 type SlaItem = {
@@ -96,6 +103,12 @@ type ProvinceRow = {
   riskCount: number;
   doctorCount: number;
   completionRate: number;
+};
+
+type EscalationRow = {
+  provinceCode: string;
+  escalatedCount: number;
+  lastEscalatedAt?: string;
 };
 
 function readSession(): AdminSession | null {
@@ -305,12 +318,13 @@ export default function App() {
     const openCases = consultations.filter((item) => isOpenStatus(item.status));
     const firstBreaches = openCases.filter((item) => isFirstResponseRisk(item)).length;
     const completionBreaches = openCases.filter((item) => isCompletionRisk(item)).length;
+    const escalatedCases = consultations.filter((item) => item.status === 'escalated').length;
     const activeProvinces = new Set(openCases.map((item) => item.provinceCode)).size;
     const avgWaitMinutes = slaItems.length > 0
       ? slaItems.reduce((sum, item) => sum + item.avgWaitMinutes, 0) / slaItems.length
       : 0;
 
-    return { openCases: openCases.length, firstBreaches, completionBreaches, activeProvinces, avgWaitMinutes };
+    return { openCases: openCases.length, firstBreaches, completionBreaches, escalatedCases, activeProvinces, avgWaitMinutes };
   }, [consultations, slaItems]);
 
   const provinceRows = useMemo<ProvinceRow[]>(() => {
@@ -340,6 +354,28 @@ export default function App() {
   const watchItems = useMemo(() => {
     return provinceRows.filter((row) => row.riskCount > 0 || (row.openCount > 0 && row.doctorCount === 0)).slice(0, 4);
   }, [provinceRows]);
+
+  const escalationRows = useMemo<EscalationRow[]>(() => {
+    const grouped = new Map<string, EscalationRow>();
+
+    for (const item of consultations.filter((consultation) => consultation.status === 'escalated')) {
+      const current = grouped.get(item.provinceCode) ?? {
+        provinceCode: item.provinceCode,
+        escalatedCount: 0,
+        lastEscalatedAt: undefined
+      };
+
+      current.escalatedCount += 1;
+      if (item.respondedAt && (!current.lastEscalatedAt || new Date(item.respondedAt).getTime() > new Date(current.lastEscalatedAt).getTime())) {
+        current.lastEscalatedAt = item.respondedAt;
+      }
+      grouped.set(item.provinceCode, current);
+    }
+
+    return Array.from(grouped.values()).sort((a, b) =>
+      b.escalatedCount - a.escalatedCount || a.provinceCode.localeCompare(b.provinceCode)
+    );
+  }, [consultations]);
 
   if (!session) {
     return (
@@ -419,10 +455,11 @@ export default function App() {
           <section className="mt-6 rounded-[2rem] bg-white p-10 text-center shadow-lg">{TEXT.loading}</section>
         ) : activeTab === 'dashboard' ? (
           <>
-            <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
               <MetricCard label={TEXT.openCases} value={String(summary.openCases)} tone="bg-white" />
               <MetricCard label={TEXT.firstBreaches} value={String(summary.firstBreaches)} tone="bg-amber-50" />
               <MetricCard label={TEXT.completionBreaches} value={String(summary.completionBreaches)} tone="bg-rose-50" />
+              <MetricCard label={TEXT.escalatedCases} value={String(summary.escalatedCases)} tone="bg-violet-50" />
               <MetricCard label={TEXT.activeProvinces} value={String(summary.activeProvinces)} tone="bg-emerald-50" />
               <MetricCard label={TEXT.avgWait} value={formatMinutes(summary.avgWaitMinutes)} tone="bg-sky-50" />
             </section>
@@ -481,6 +518,47 @@ export default function App() {
                   )}
                 </div>
               </article>
+            </section>
+
+            <section className="mt-6 rounded-[2rem] bg-white p-6 shadow-lg">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-violet-500">{TEXT.escalationTable}</p>
+                  <h2 className="text-2xl font-bold text-ops-navy">{TEXT.escalationHint}</h2>
+                </div>
+                <div className="text-sm text-slate-500">{summary.escalatedCases} {TEXT.escalatedCases}</div>
+              </div>
+
+              {escalationRows.length > 0 ? (
+                <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-slate-100">
+                  <table className="min-w-full border-collapse text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">{TEXT.province}</th>
+                        <th className="px-4 py-3">{TEXT.escalated}</th>
+                        <th className="px-4 py-3">{TEXT.doctors}</th>
+                        <th className="px-4 py-3">{TEXT.lastEscalatedAt}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {escalationRows.map((row) => (
+                        <tr key={row.provinceCode} className="border-t border-slate-100">
+                          <td className="px-4 py-4 font-semibold text-ops-navy">{provinceLabel(row.provinceCode)}</td>
+                          <td className="px-4 py-4">
+                            <span className="rounded-full bg-violet-100 px-3 py-1 font-semibold text-violet-700">{row.escalatedCount}</span>
+                          </td>
+                          <td className="px-4 py-4">{routingItems.find((item) => item.provinceCode === row.provinceCode)?.doctorCount ?? 0}</td>
+                          <td className="px-4 py-4">{formatThaiDate(row.lastEscalatedAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="mt-5 rounded-[1.5rem] border border-slate-100 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                  {TEXT.escalationEmpty}
+                </div>
+              )}
             </section>
           </>
         ) : (
